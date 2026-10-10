@@ -24,7 +24,7 @@ import logging
 import threading
 import time
 from collections.abc import Callable
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, replace
 
 from . import cat, devices
 from .cat import DataSubmode, Mode
@@ -126,14 +126,11 @@ class _Pending:
     data_submode: DataSubmode | None = None
     bandwidth: int | None = None
     power: float | None = None
-    cat_ptt: bool | None = None
-    extra: list[str] = field(default_factory=list)
 
     def empty(self) -> bool:
         return (
             self.band is None and self.frequency is None and self.mode is None and self.data_submode is None
-            and self.bandwidth is None and self.power is None and self.cat_ptt is None
-            and not self.extra
+            and self.bandwidth is None and self.power is None
         )
 
 
@@ -455,10 +452,11 @@ class RadioLink:
             self._update(link=Link.NOT_KX3, options=om)
             return
         firmware = cat.parse_rv(self._get("RVM;") or "")
-        self._saved_meta = {}
+        # Keep the first values read this session: a re-handshake reads our own
+        # K20/AI0 back, and saving those would lose what to restore on exit.
         k2 = cat.parse_k2(self._get("K2;") or "")
         if k2 is not None:
-            self._saved_meta["K2"] = k2
+            self._saved_meta.setdefault("K2", k2)
             if k2 != 0:
                 self._send("K20;")
                 self._get("K2;")
@@ -466,7 +464,7 @@ class RadioLink:
         self._k31 = k3 == 1
         ai = cat.parse_ai(self._get("AI;") or "")
         if ai is not None:
-            self._saved_meta["AI"] = ai
+            self._saved_meta.setdefault("AI", ai)
             if ai != 0:
                 self._send("AI0;")
                 self._get("AI;")

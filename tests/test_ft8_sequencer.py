@@ -138,3 +138,30 @@ def test_halt():
     s.call_cq(tx_even=True)
     s.halt()
     assert s.next_message() is None and not s.active
+
+
+def test_engine_ignores_completion_from_a_replaced_sequencer(tmp_path, monkeypatch):
+    """A transmission still playing when the operator answers someone else must
+    not be credited to the new contact (it would log early and skip RR73)."""
+    from types import SimpleNamespace
+
+    from kx3rig import config
+    from kx3rig.ft8.engine import Ft8Engine
+
+    monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path))
+    station = SimpleNamespace(settings=config.Settings(callsign=ME, grid=GRID), stop_data_tx=lambda: None)
+    engine = Ft8Engine(station)
+    old = engine.sequencer
+    old.call_cq(tx_even=True)
+    engine.transmitting_text = "CQ K1ABC FN42"
+    new = Sequencer(ME, GRID)
+    assert new.answer(dec("K1ABC N0XYZ R-11"))
+    assert new.stage is Stage.ROGERS
+    engine.sequencer = new
+    logged = []
+    engine.connect("logged", lambda _e, entry: logged.append(entry))
+    engine._tx_done(old, "CQ K1ABC FN42")
+    assert engine.transmitting_text == ""
+    assert not logged
+    assert new.stage is Stage.ROGERS
+    assert new.next_message() == "N0XYZ K1ABC RR73"

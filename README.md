@@ -81,8 +81,9 @@ including stations that answer you.
 
 ## Safety
 
-- The serial port opens with RTS held low (RTS keys the Digirig's push-to-talk), so connecting
-  never transmits.
+- KX3-Rig clears RTS and DTR before opening the serial port (RTS keys the Digirig's
+  push-to-talk). A brief RTS pulse from the USB serial driver during open has not been ruled
+  out yet; verify into a dummy load.
 - KX3-Rig only sends a short, fixed list of CAT commands. Commands that could transmit or
   change radio configuration (switch emulation, keying text, menu writes, baud change,
   power-off) are refused before they reach the radio.

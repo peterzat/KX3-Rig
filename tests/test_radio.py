@@ -78,6 +78,18 @@ def test_restores_k2_and_ai_left_by_other_software():
     assert fake.closed
 
 
+def test_restores_original_k2_and_ai_after_a_re_handshake():
+    fake = FakeKX3(k2=2, ai=1)
+    with Harness(fake) as h:
+        assert wait_for(lambda: h.link.state.link is Link.CONNECTED)
+        fake.powered = False
+        assert wait_for(lambda: h.link.state.link is Link.NO_REPLY, timeout=5)
+        fake.powered = True
+        assert wait_for(lambda: h.link.state.link is Link.CONNECTED, timeout=5)
+        assert fake.k2 == 0 and fake.ai == 0
+    assert fake.k2 == 2 and fake.ai == 1
+
+
 def test_radio_off_reports_no_reply_and_sends_nothing_else():
     fake = FakeKX3(powered=False)
     with Harness(fake) as h:

@@ -38,10 +38,11 @@ def _label(text: str, *classes: str, **kw) -> Gtk.Label:
 class RadioPage(Gtk.Box):
     __gtype_name__ = "KX3RadioPage"
 
-    def __init__(self, station, toast):
+    def __init__(self, station, toast, confirm_tx=None):
         super().__init__(orientation=Gtk.Orientation.VERTICAL)
         self.station = station
         self.toast = toast
+        self.confirm_tx = confirm_tx       # callable(action): per-band first-TX confirmation
         self._syncing = False
 
         scroller = Gtk.ScrolledWindow(hscrollbar_policy=Gtk.PolicyType.NEVER, vexpand=True)
@@ -204,6 +205,21 @@ class RadioPage(Gtk.Box):
     # --- interaction ------------------------------------------------------------------------
 
     def _talk_pressed(self) -> None:
+        check = self.station.voice_check()
+        if not check.allowed or self.confirm_tx is None:
+            self._start_talking()
+            return
+        # Already confirmed on this band: key now. Otherwise the dialog only
+        # records the confirmation; the next press keys.
+        pressing = True
+
+        def go():
+            if pressing:
+                self._start_talking()
+        self.confirm_tx(go)
+        pressing = False
+
+    def _start_talking(self) -> None:
         check = self.station.start_talking()
         if not check.allowed and check.reason:
             self.toast(check.reason)

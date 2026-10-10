@@ -296,7 +296,7 @@ class Ft8Engine(GObject.Object):
             samples = wave[int(-lead * TX_RATE):]   # late: skip what has already elapsed
         self._tx_slots.add(slot)
         self._tx_slots = {s for s in self._tx_slots if s > slot - 10}
-        result = self.station.play_data(samples, TX_RATE, on_done=lambda: self._tx_done(slot, text),
+        result = self.station.play_data(samples, TX_RATE, on_done=lambda s=seq, t=text: self._tx_done(s, t),
                                         limit_s=PERIOD)
         if not result.allowed:
             self.halt()
@@ -317,12 +317,13 @@ class Ft8Engine(GObject.Object):
             self._wave_cache[key] = encode.waveform(tones, TX_RATE, self.tx_offset)
         return self._wave_cache[key]
 
-    def _tx_done(self, slot: int, text: str) -> None:
+    def _tx_done(self, seq: Sequencer, text: str) -> None:
         if not self.transmitting_text:
             return  # halted
         self.transmitting_text = ""
         self.emit("transmitting", False, "")
-        seq = self.sequencer
+        if seq is not self.sequencer:
+            return  # the operator started a new contact while this one was sending
         if not seq.active:
             return
         if seq.sent(text, datetime.now(timezone.utc)):

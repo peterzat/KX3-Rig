@@ -7,8 +7,9 @@ cross-checked against Hamlib 4.5.5 (see docs/references.md, "CAT protocol").
 Safety: the transport refuses to send anything that does not match ALLOWED.
 Commands that can transmit or reconfigure the radio (SWT/SWH switch emulation,
 KY keying text, MN/MP menu writes, BR baud change, PS0 power off, UP/DN, which
-edit an open menu) are deliberately absent. TX; and RX; are allowed because
-the operator's push-to-talk needs a CAT fallback and RX; is the safe stop.
+edit an open menu, TX keying) are deliberately absent. Push-to-talk is the
+Digirig's RTS line, which has a watchdog. RX; is allowed because it is the
+safe stop.
 """
 
 from __future__ import annotations
@@ -86,7 +87,7 @@ ALLOWED = re.compile(
     r"ID|OM|RVM|RVD|IF|TQ|SM|PO|SW|PC|MD|DT|BW|FA|FB|K2|K3|AI|PS|BN"  # GETs
     r"|FA\d{11}|MD[12345679]|DT[0-3]|BW\d{4}|PC\d{3}|BN(?:0\d|10)"  # SETs
     r"|K2[0-3]|AI[0-3]"                                             # restore meta state
-    r"|TX|RX"                                                       # PTT (CAT fallback) and stop
+    r"|RX"                                                          # stop transmitting
     r");$"
 )
 

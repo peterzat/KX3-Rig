@@ -68,3 +68,25 @@ def test_processes_holding_finds_owner(tmp_path):
 def test_friendly_app_name():
     assert devices.friendly_app_name("wsjtx") == "WSJT-X"
     assert devices.friendly_app_name("mystery") == "mystery"
+
+
+def test_pick_mic_keeps_non_digirig_default():
+    nodes = [AudioNode(BUILTIN_IN, "Audio/Source"), AudioNode(DIGIRIG_IN, "Audio/Source")]
+    assert devices.pick_mic(BUILTIN_IN, nodes) == BUILTIN_IN
+
+
+def test_pick_mic_never_uses_digirig_input():
+    nodes = [
+        AudioNode(DIGIRIG_IN, "Audio/Source"),
+        AudioNode(DIGIRIG_OUT + ".monitor", "Audio/Source"),
+        AudioNode(BUILTIN_OUT, "Audio/Sink"),
+        AudioNode(BUILTIN_IN, "Audio/Source"),
+    ]
+    assert devices.pick_mic(DIGIRIG_IN, nodes) == BUILTIN_IN
+    assert devices.pick_mic(None, nodes) == BUILTIN_IN
+
+
+def test_pick_mic_none_when_only_digirig():
+    nodes = [AudioNode(DIGIRIG_IN, "Audio/Source"), AudioNode(BUILTIN_OUT + ".monitor", "Audio/Source")]
+    assert devices.pick_mic(DIGIRIG_IN, nodes) is None
+    assert devices.pick_mic(None, []) is None

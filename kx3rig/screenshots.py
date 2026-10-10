@@ -33,6 +33,11 @@ def capture(widget: Gtk.Widget, path: str) -> bool:
 
 
 def run(app, out_dir: str) -> None:
+    if not app.demo:
+        # The plans retune and key the radio; never run them against real hardware.
+        print("screenshot: refused without --demo")
+        app.quit()
+        return
     os.makedirs(out_dir, exist_ok=True)
     win = app.window
     style = Adw.StyleManager.get_default()

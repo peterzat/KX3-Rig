@@ -74,7 +74,7 @@ class MainWindow(Adw.ApplicationWindow):
         view = Adw.ToolbarView()
         header = Adw.HeaderBar()
         self.stack = Adw.ViewStack()
-        self.radio_page = RadioPage(self.station, self.toast)
+        self.radio_page = RadioPage(self.station, self.toast, self.confirm_transmit)
         self.ft8_page = Ft8Page(self.station, self.engine, self.toast, self.confirm_transmit)
         self.stack.add_titled_with_icon(self.radio_page, "radio", "Radio", "kx3rig-transceiver-symbolic")
         self.stack.add_titled_with_icon(self.ft8_page, "ft8", "FT8", "network-transmit-receive-symbolic")

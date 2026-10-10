@@ -74,6 +74,19 @@ def pick_digirig_audio(nodes: list[AudioNode]) -> DigirigAudio:
     return DigirigAudio(source, sink)
 
 
+def pick_mic(default_source: str | None, nodes: list[AudioNode]) -> str | None:
+    """Choose the voice-transmit microphone: never the Digirig input.
+
+    The Digirig input carries the radio's own audio (KX3 PHONES); sending it to
+    the KX3 MIC would loop it back on air. Use the default source unless it is
+    the Digirig (or unknown), else any other source, else None (no microphone).
+    """
+    if default_source and not DIGIRIG_NODE_RE.search(default_source):
+        return default_source
+    others = [n for n in nodes if n.is_source and not n.is_digirig]
+    return others[0].name if others else None
+
+
 def processes_holding(path: str, proc_root: str = "/proc") -> list[tuple[int, str]]:
     """Return (pid, command name) for processes with `path` open.
 

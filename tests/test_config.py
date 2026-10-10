@@ -3,10 +3,10 @@ import json
 from kx3rig import config
 
 
-def test_defaults_are_this_station():
+def test_defaults_have_no_station_identity():
     s = config.Settings()
-    assert s.callsign == "K1ABC"
-    assert s.grid4 == "FN42"
+    assert s.callsign == ""
+    assert s.grid4 == ""
     assert s.license_class == "General"
     assert s.power_w == 5.0
 
@@ -36,4 +36,6 @@ def test_corrupt_file_gives_defaults(tmp_path):
     path.write_text("{not json")
     assert config.load(str(path)) == config.Settings()
     path.write_text("[1, 2]")
+    assert config.load(str(path)) == config.Settings()
+    path.write_text('{"callsign": null}')
     assert config.load(str(path)) == config.Settings()

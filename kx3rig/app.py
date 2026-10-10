@@ -209,6 +209,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--debug", action="store_true", help="verbose logging")
     parser.add_argument("--version", action="version", version=f"KX3-Rig {__version__}")
     args = parser.parse_args(argv)
+    if args.screenshot and not args.demo:
+        parser.error("--screenshot requires --demo (it drives the radio and can transmit)")
     logging.basicConfig(level=logging.DEBUG if args.debug else logging.WARNING,
                         format="%(asctime)s %(name)s %(levelname)s %(message)s")
     GLib.set_application_name("KX3-Rig")

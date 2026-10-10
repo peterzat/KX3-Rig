@@ -1,4 +1,4 @@
-"""Station settings, preconfigured for this station and stored as JSON.
+"""Station settings, stored as JSON.
 
 Location: $XDG_CONFIG_HOME/kx3-rig/settings.json (usually ~/.config/kx3-rig/).
 Unknown keys in the file are ignored and missing keys take the defaults, so the
@@ -26,8 +26,9 @@ def data_dir() -> str:
 
 @dataclass
 class Settings:
-    callsign: str = "K1ABC"
-    grid: str = "FN42hn"
+    # Empty until the operator sets them in Preferences; transmit is refused without a callsign.
+    callsign: str = ""
+    grid: str = ""
     license_class: str = "General"
     # Transmit power the app sets when you start transmitting, in watts.
     power_w: float = 5.0
@@ -81,7 +82,7 @@ def load(path: str | None = None) -> Settings:
         return from_dict(raw)
     except FileNotFoundError:
         return Settings()
-    except (OSError, ValueError, TypeError):
+    except (OSError, ValueError, TypeError, AttributeError):
         # A corrupt file should never stop the app from starting.
         return Settings()
 

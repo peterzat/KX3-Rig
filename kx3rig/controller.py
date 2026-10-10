@@ -157,16 +157,23 @@ class Station(GObject.Object):
     def connected(self) -> bool:
         return self.radio.link is Link.CONNECTED
 
+    @property
+    def transmitting(self) -> bool:
+        return bool(self.radio.ptt or self.radio.transmitting or self.talking or self.data_transmitting)
+
+    # Frequency, band, and mode changes are refused while transmitting: the
+    # license-class check ran at key-down for the frequency and mode in use then.
+
     def tune_to(self, hz: int) -> None:
-        if self.connected and hz > 0:
+        if self.connected and hz > 0 and not self.transmitting:
             self.link.set_frequency(hz)
 
     def select_band(self, band: bandplan.Band) -> None:
-        if self.connected:
+        if self.connected and not self.transmitting:
             self.link.set_band(band.number)
 
     def select_mode(self, mode: Mode) -> None:
-        if not self.connected:
+        if not self.connected or self.transmitting:
             return
         if mode.is_data:
             self.link.set_mode(mode, DataSubmode.DATA_A)
@@ -179,7 +186,7 @@ class Station(GObject.Object):
 
     def go_ft8(self, band: bandplan.Band) -> None:
         """Put the radio on the FT8 dial frequency for a band, DATA A mode."""
-        if not self.connected:
+        if not self.connected or self.transmitting:
             return
         self.link.set_frequency(band.ft8)
         self.link.set_mode(Mode.DATA, DataSubmode.DATA_A)
@@ -215,11 +222,16 @@ class Station(GObject.Object):
             return check
         from .audio import VoiceTransmit, default_node_name
 
-        mic = default_node_name("source")
-        if self._digirig_audio and self._digirig_audio.source and mic == self._digirig_audio.source.name:
-            mic = None  # never loop the radio's own audio back into its microphone
         try:
             if not self.demo:
+                # Never loop the radio's own audio back into its microphone, and
+                # never leave the mic untargeted (pipewiresrc would then follow
+                # the default source, which may be the Digirig).
+                mic = default_node_name("source")
+                if not mic or devices.DIGIRIG_NODE_RE.search(mic):
+                    mic = devices.pick_mic(mic, devices.list_audio_nodes())
+                if mic is None:
+                    return TxCheck(False, "No microphone found other than the Digirig. Connect a microphone to talk.")
                 self._voice = VoiceTransmit(
                     mic_node=mic,
                     digirig_sink_node=self._digirig_audio.sink.name,
