@@ -25,7 +25,7 @@
   transition: background-color 150ms ease-out;
 }
 .freq-digit:hover { background-color: alpha(currentColor, 0.08); }
-.freq-digit.step { box-shadow: inset 0 -4px 0 0 @accent_bg_color; }
+.freq-digit.step { box-shadow: inset 0 -4px 0 0 @accent_bg_color; border-radius: 8px 8px 2px 2px; }
 .freq-digit.blank { opacity: 0; }
 .freq-readout:focus-visible {
   outline: 2px solid alpha(@accent_color, 0.5);
@@ -48,11 +48,11 @@ levelbar.meter.warn block.filled { background-color: @warning_bg_color; }
 
 /* Band chips in a GtkFlowBox (AdwWrapBox is 1.7+) */
 flowbox.band-chips > flowboxchild { padding: 0; }
-flowbox.band-chips button { border-radius: 9999px; min-width: 52px; }
+flowbox.band-chips button { border-radius: 9999px; min-width: 46px; padding-left: 6px; padding-right: 6px; }
 flowbox.band-chips button.out-of-antenna { opacity: 0.75; }
 
 /* Mode segmented control */
-.mode-switch button { min-width: 58px; }
+.mode-switch button { min-width: 64px; }
 
 /* Push to talk */
 button.talk { min-height: 44px; min-width: 220px; font-weight: 700; }
@@ -61,7 +61,7 @@ button.talk.on-air { background-color: @error_bg_color; color: @error_fg_color; 
 /* FT8 decode rows */
 .decode-list { background: none; }
 .decode-row { padding: 4px 12px; border-radius: 8px; }
-.decode-row.cq { background-color: alpha(@accent_bg_color, 0.10); }
+.decode-row.cq { background-color: alpha(@accent_bg_color, 0.06); }
 .decode-row.me { background-color: alpha(@warning_bg_color, 0.22); }
 .decode-row.mine { background-color: alpha(@error_bg_color, 0.10); }
 .decode-row.separator { padding: 2px 12px; }
@@ -79,3 +79,10 @@ button.talk.on-air { background-color: @error_bg_color; color: @error_fg_color; 
 /* Cycle progress */
 progressbar.cycle trough, progressbar.cycle progress { min-height: 4px; border-radius: 9999px; }
 progressbar.cycle.tx progress { background-color: @error_bg_color; }
+
+/* Contact conversation bubbles */
+.bubble-ours { background-color: alpha(@accent_bg_color, 0.16); border-radius: 12px; }
+.bubble-theirs { border-radius: 12px; }
+
+/* Control rows (Band, Mode) */
+.control-label { min-width: 48px; }

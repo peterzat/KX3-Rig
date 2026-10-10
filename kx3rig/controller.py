@@ -70,8 +70,9 @@ class Station(GObject.Object):
         self.spectrum = Spectrum(fft_size=2048, hop=512)
         self.level = AutoLevel()
         self.rx_level_dbfs = -120.0
-        # Waterfall rows (normalized 0..1) produced on the audio thread, drained by the widget.
-        self.rows: collections.deque[np.ndarray] = collections.deque(maxlen=256)
+        # Waterfall rows (normalized 0..1) produced on the audio thread; each
+        # waterfall widget drains its own queue.
+        self._row_queues: list[collections.deque] = []
         # Raw 12 kHz audio for the FT8 decoder: list of (end_time, samples) chunks.
         self.sample_listeners: list = []
         self._rx_lock = threading.Lock()
@@ -394,12 +395,19 @@ class Station(GObject.Object):
         self.rx_level_dbfs = rms_dbfs(samples)
         for row in self.spectrum.feed(samples):
             band = row[self.spectrum.bins_for(0, 3500)]
-            self.rows.append(self.level.normalize(band).astype(np.float32))
+            normalized = self.level.normalize(band).astype(np.float32)
+            for q in self._row_queues:
+                q.append(normalized)
         for listener in list(self.sample_listeners):
             try:
                 listener(samples, end_time)
             except Exception:
                 log.exception("sample listener failed")
+
+    def subscribe_rows(self) -> collections.deque:
+        q: collections.deque = collections.deque(maxlen=256)
+        self._row_queues.append(q)
+        return q
 
     @property
     def waterfall_span_hz(self) -> float:

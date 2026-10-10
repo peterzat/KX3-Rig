@@ -76,7 +76,7 @@ class Sequencer:
     tx_even: bool = False          # which period parity we transmit in
     repeats: int = 0
     logged: bool = False
-    history: list[str] = field(default_factory=list)
+    history: list[tuple[datetime, str]] = field(default_factory=list)
     _rr73_sent: bool = False
     _resend_rr73: bool = False
 
@@ -140,7 +140,7 @@ class Sequencer:
         """Record a transmission. Returns True when this send completes the contact
         (so the caller logs it): the first RR73 or 73 we send."""
         when = when or datetime.now(timezone.utc)
-        self.history.append(text)
+        self.history.append((when, text))
         self.repeats += 1
         c = self.contact
         if c is not None and c.time_on is None and self.stage in (Stage.REPORT, Stage.ROGER_REPORT):

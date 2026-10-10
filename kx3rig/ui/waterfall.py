@@ -107,6 +107,7 @@ class Waterfall(Gtk.Widget):
         self.set_hexpand(True)
         self.set_vexpand(True)
         self.station = station
+        self.rows = station.subscribe_rows()
         self.span_hz = span_hz
         self.palette = palette
         self.mirror = False              # LSB: flip so RF increases to the right
@@ -154,14 +155,12 @@ class Waterfall(Gtk.Widget):
         dark = Adw.StyleManager.get_default().get_dark()
         self._lut = build_lut(PALETTES[self.palette]["dark" if dark else "light"])
         if self._img is not None:
-            self._img[:] = self._lut[0]
-        self.queue_draw()
+            self._upload()
 
     def clear(self) -> None:
         if self._img is not None:
-            self._img[:] = self._lut[0]
-            self._texture = None
-            self.queue_draw()
+            self._img[:] = 0
+            self._upload()
 
     # --- frame pump ----------------------------------------------------------------------
 
@@ -175,7 +174,7 @@ class Waterfall(Gtk.Widget):
             self._tick = 0
 
     def _on_tick(self, widget, clock) -> bool:
-        rows = self.station.rows
+        rows = self.rows
         if not rows:
             return GLib.SOURCE_CONTINUE
         new = []
@@ -189,24 +188,28 @@ class Waterfall(Gtk.Widget):
         width = len(new[-1])
         if self._img is None or self._width != width:
             self._width = width
-            self._img = np.empty((HISTORY_ROWS, width, 4), np.uint8)
-            self._img[:] = self._lut[0]
+            self._img = np.zeros((HISTORY_ROWS, width), np.uint8)   # levels 0..255
             self._row = 0
         for row in new[-HISTORY_ROWS:]:
             if len(row) != width:
                 continue
             self._row = (self._row - 1) % HISTORY_ROWS
-            idx = np.clip(row * 255.0, 0, 255).astype(np.uint8)
-            self._img[self._row] = self._lut[idx]
+            self._img[self._row] = np.clip(row * 255.0, 0, 255).astype(np.uint8)
         recent = np.mean(np.stack(new[-4:]), axis=0)
         self._trace = recent if self._trace is None or len(self._trace) != width else 0.6 * self._trace + 0.4 * recent
+        self._upload()
+        return GLib.SOURCE_CONTINUE
+
+    def _upload(self) -> None:
+        """Color the level history through the palette and upload it as a texture."""
         ordered = np.concatenate([self._img[self._row:], self._img[: self._row]])
         if self.mirror:
             ordered = ordered[:, ::-1]
-        data = GLib.Bytes.new(np.ascontiguousarray(ordered).tobytes())
-        self._texture = Gdk.MemoryTexture.new(width, HISTORY_ROWS, Gdk.MemoryFormat.R8G8B8A8, data, width * 4)
+        rgba = self._lut[ordered]
+        data = GLib.Bytes.new(np.ascontiguousarray(rgba).tobytes())
+        self._texture = Gdk.MemoryTexture.new(self._width, HISTORY_ROWS, Gdk.MemoryFormat.R8G8B8A8,
+                                              data, self._width * 4)
         self.queue_draw()
-        return GLib.SOURCE_CONTINUE
 
     # --- geometry --------------------------------------------------------------------------
 

@@ -59,7 +59,7 @@ class AutoLevel:
     occupy few bins), smoothed so it does not pump with every fade.
     """
 
-    def __init__(self, span_db: float = 50.0, below_floor_db: float = 6.0, smoothing: float = 0.05):
+    def __init__(self, span_db: float = 45.0, below_floor_db: float = 3.0, smoothing: float = 0.05):
         self.span_db = span_db
         self.below_floor_db = below_floor_db
         self.smoothing = smoothing

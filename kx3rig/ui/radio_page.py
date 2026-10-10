@@ -75,9 +75,11 @@ class RadioPage(Gtk.Box):
         body.append(meters)
 
         # --- band + mode ------------------------------------------------------------------
-        controls = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=14)
-        controls.append(self._build_bands())
-        controls.append(self._build_modes())
+        controls = Gtk.Grid(column_spacing=14, row_spacing=12, halign=Gtk.Align.CENTER)
+        controls.attach(_label("Band", "caption-heading", "dim-label", "control-label", xalign=1), 0, 0, 1, 1)
+        controls.attach(self._build_bands(), 1, 0, 1, 1)
+        controls.attach(_label("Mode", "caption-heading", "dim-label", "control-label", xalign=1), 0, 1, 1, 1)
+        controls.attach(self._build_modes(), 1, 1, 1, 1)
         body.append(controls)
 
         # --- waterfall ------------------------------------------------------------------
@@ -134,11 +136,9 @@ class RadioPage(Gtk.Box):
         return box
 
     def _build_bands(self) -> Gtk.Widget:
-        row = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
-        row.append(_label("Band", "caption-heading", "dim-label", xalign=0))
         self.band_box = Gtk.FlowBox(selection_mode=Gtk.SelectionMode.NONE, homogeneous=True,
                                     max_children_per_line=11, min_children_per_line=4,
-                                    column_spacing=6, row_spacing=6)
+                                    column_spacing=6, row_spacing=6, valign=Gtk.Align.CENTER)
         self.band_box.add_css_class("band-chips")
         self.band_buttons: dict[str, Gtk.ToggleButton] = {}
         group = None
@@ -151,12 +151,9 @@ class RadioPage(Gtk.Box):
             btn.connect("toggled", self._on_band_toggled, band)
             self.band_buttons[band.name] = btn
             self.band_box.append(btn)
-        row.append(self.band_box)
-        return row
+        return self.band_box
 
     def _build_modes(self) -> Gtk.Widget:
-        row = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
-        row.append(_label("Mode", "caption-heading", "dim-label", xalign=0))
         box = Gtk.Box(halign=Gtk.Align.START)
         box.add_css_class("linked")
         box.add_css_class("mode-switch")
@@ -171,8 +168,7 @@ class RadioPage(Gtk.Box):
             btn.connect("toggled", self._on_mode_toggled, mode)
             self.mode_buttons[mode] = btn
             box.append(btn)
-        row.append(box)
-        return row
+        return box
 
     def _build_talk(self) -> Gtk.Widget:
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10, halign=Gtk.Align.CENTER)

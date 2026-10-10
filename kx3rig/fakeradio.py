@@ -150,7 +150,7 @@ class FakeKX3:
         if cmd == "SM":
             if self.transmitting:
                 return "SM0000;"
-            self.smeter = max(0, min(15, self.smeter + random.choice((-1, 0, 0, 1))))
+            self.smeter = max(2, min(8, self.smeter + random.choice((-1, 0, 0, 1))))
             return f"SM{self.smeter:04d};"
         if cmd == "TQ":
             return f"TQ{1 if self.transmitting else 0};"

@@ -66,7 +66,8 @@ class Ft8Engine(GObject.Object):
         self.demo = demo
         self.recorder = SlotRecorder()
         self.jt9 = Jt9(os.path.join(config.data_dir(), "jt9"))
-        self.log_path = os.path.join(config.data_dir(), "kx3rig-log.adi")
+        # Demo contacts are simulated: keep them out of the real logbook.
+        self.log_path = os.path.join(config.data_dir(), "kx3rig-demo-log.adi" if demo else "kx3rig-log.adi")
         self.sequencer = Sequencer(self.settings.callsign, self.settings.grid4)
         self.decodes: dict[int, list[Decode]] = {}
         self.tx_offset = int(self.settings.ft8_tx_offset_hz)
