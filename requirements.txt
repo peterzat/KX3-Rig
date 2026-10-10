@@ -1,0 +1,8 @@
+# Runtime. PyGObject (GTK 4, libadwaita 1.5, GStreamer) comes from the system
+# packages python3-gi, gir1.2-adw-1, gir1.2-gtk-4.0, gir1.2-gst-plugins-base-1.0;
+# the venv is created with --system-site-packages to see them.
+numpy>=1.26
+pyserial>=3.5
+
+# Tests
+pytest>=8.0

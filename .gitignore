@@ -1,0 +1,28 @@
+# Secrets / credentials
+.env
+*.pem
+*.key
+*.secret
+
+# Local working notes
+TODO.md
+
+# Editor / OS junk
+.DS_Store
+*~
+*.swp
+.idea/
+.vscode/
+
+# Claude Code local state
+.claude/
+
+# Python artifacts
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+.pytest_cache/
+*.egg-info/
+build/
+dist/
