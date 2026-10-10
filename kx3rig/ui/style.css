@@ -1,0 +1,81 @@
+/* KX3-Rig: one stylesheet for light, dark and high contrast.
+   Uses libadwaita 1.5 named colors only (var(--...) is 1.6+). */
+
+/* Neutral pill tag (ported from Bottles' .tag) */
+.tag {
+  border-radius: 9999px;
+  background-color: alpha(currentColor, 0.07);
+  padding: 3px 12px;
+}
+.tag.tx { background-color: @error_bg_color; color: @error_fg_color; }
+.tag.cq { background-color: alpha(@accent_bg_color, 0.18); }
+.tag.me { background-color: alpha(@warning_bg_color, 0.30); }
+.tag.small { padding: 1px 8px; font-size: 80%; }
+
+/* Hero frequency readout (pair with .numeric) */
+.freq-readout { font-weight: 300; font-size: 420%; }
+.freq-readout.compact { font-size: 300%; }
+.freq-readout .freq-hz { font-size: 62%; opacity: 0.55; }
+.freq-readout .freq-sep { opacity: 0.45; }
+.freq-readout .freq-unit { font-size: 28%; font-weight: 700; opacity: 0.55; margin-left: 10px; }
+.freq-readout.offline { opacity: 0.35; }
+.freq-digit {
+  border-radius: 8px;
+  padding: 0 1px;
+  transition: background-color 150ms ease-out;
+}
+.freq-digit:hover { background-color: alpha(currentColor, 0.08); }
+.freq-digit.step { box-shadow: inset 0 -4px 0 0 @accent_bg_color; }
+.freq-digit.blank { opacity: 0; }
+.freq-readout:focus-visible {
+  outline: 2px solid alpha(@accent_color, 0.5);
+  outline-offset: 6px;
+  border-radius: 14px;
+}
+
+/* Meters (precedent: Bottles levelbar styling) */
+levelbar.meter trough { min-height: 8px; border-radius: 9999px; }
+levelbar.meter block { border-radius: 9999px; }
+levelbar.meter block.filled { background-color: @accent_bg_color; }
+levelbar.meter.tx block.filled { background-color: @error_bg_color; }
+levelbar.meter.good block.filled { background-color: @success_bg_color; }
+levelbar.meter.warn block.filled { background-color: @warning_bg_color; }
+.meter-scale { font-size: 75%; }
+
+/* Waterfall: shape, radius and shadow come from .card */
+.waterfall { background-color: @view_bg_color; }
+.axis-label { font-size: 75%; }
+
+/* Band chips in a GtkFlowBox (AdwWrapBox is 1.7+) */
+flowbox.band-chips > flowboxchild { padding: 0; }
+flowbox.band-chips button { border-radius: 9999px; min-width: 52px; }
+flowbox.band-chips button.out-of-antenna { opacity: 0.75; }
+
+/* Mode segmented control */
+.mode-switch button { min-width: 58px; }
+
+/* Push to talk */
+button.talk { min-height: 44px; min-width: 220px; font-weight: 700; }
+button.talk.on-air { background-color: @error_bg_color; color: @error_fg_color; }
+
+/* FT8 decode rows */
+.decode-list { background: none; }
+.decode-row { padding: 4px 12px; border-radius: 8px; }
+.decode-row.cq { background-color: alpha(@accent_bg_color, 0.10); }
+.decode-row.me { background-color: alpha(@warning_bg_color, 0.22); }
+.decode-row.mine { background-color: alpha(@error_bg_color, 0.10); }
+.decode-row.separator { padding: 2px 12px; }
+.ft8-message { font-size: 105%; }
+
+/* Contact panel */
+.contact-call { font-size: 200%; font-weight: 800; }
+.contact-step { padding: 4px 0; }
+.contact-step.current { font-weight: 700; }
+.contact-step.done { opacity: 0.5; }
+
+/* Connect page checklist */
+.checklist row { min-height: 56px; }
+
+/* Cycle progress */
+progressbar.cycle trough, progressbar.cycle progress { min-height: 4px; border-radius: 9999px; }
+progressbar.cycle.tx progress { background-color: @error_bg_color; }

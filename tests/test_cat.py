@@ -113,7 +113,7 @@ def test_frame_splitter_handles_partial_and_garbage():
 
 @pytest.mark.parametrize("cmd", [
     "FA;", "FA00014074000;", "MD2;", "DT0;", "BW0280;", "PC005;", "IF;", "SM;", "TQ;",
-    "ID;", "OM;", "RVM;", "K2;", "K20;", "AI0;", "TX;", "RX;", "SW;", "PO;",
+    "ID;", "OM;", "RVM;", "K2;", "K20;", "AI0;", "TX;", "RX;", "SW;", "PO;", "BN05;", "BN10;",
 ])
 def test_allow_list_accepts_driver_commands(cmd):
     assert cat.is_allowed(cmd)
@@ -131,6 +131,14 @@ def test_allow_list_accepts_driver_commands(cmd):
     "MD8;",          # not a mode
     "FA1407400;",    # malformed frequency
     "FA00014074000;MD2;",  # one command at a time
+    "BN16;",         # transverter band
 ])
 def test_allow_list_rejects_dangerous_commands(cmd):
     assert not cat.is_allowed(cmd)
+
+
+def test_band_number():
+    assert cat.set_band(5) == "BN05;"
+    assert cat.parse_bn("BN10;") == 10
+    with pytest.raises(ValueError):
+        cat.set_band(16)

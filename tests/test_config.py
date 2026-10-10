@@ -17,7 +17,7 @@ def test_missing_file_gives_defaults(tmp_path):
 
 def test_round_trip(tmp_path):
     path = str(tmp_path / "settings.json")
-    s = config.Settings(power_w=3.0, band_memory={"20m": 14_200_000})
+    s = config.Settings(power_w=3.0, listen=False)
     config.save(s, path)
     assert config.load(path) == s
 

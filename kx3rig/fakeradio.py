@@ -44,6 +44,13 @@ class FakeKX3:
         self._lock = threading.Lock()
         self.smeter = 5
         self.timeout = 0.03
+        # Per-band memory like the real radio's BAND keys: band -> (frequency, mode).
+        self.band_memory = {
+            0: (1_840_000, Mode.LSB), 1: (3_985_000, Mode.LSB), 2: (5_357_000, Mode.USB),
+            3: (7_185_000, Mode.LSB), 4: (10_136_000, Mode.DATA), 5: (14_074_000, Mode.DATA),
+            6: (18_100_000, Mode.USB), 7: (21_300_000, Mode.USB), 8: (24_950_000, Mode.USB),
+            9: (28_400_000, Mode.USB), 10: (50_125_000, Mode.USB),
+        }
 
     # --- pyserial surface -------------------------------------------------------
 
@@ -121,6 +128,9 @@ class FakeKX3:
         if cmd.startswith("MD") and len(cmd) == 3:
             self.mode = Mode(int(cmd[2]))
             self.bandwidth = {Mode.CW: 400, Mode.AM: 4000, Mode.FM: 6000}.get(self.mode, 2800)
+            return None
+        if cmd.startswith("BN") and len(cmd) == 4:
+            self.frequency, self.mode = self.band_memory[int(cmd[2:])]
             return None
         if cmd == "DT":
             return f"DT{self.data_submode};"

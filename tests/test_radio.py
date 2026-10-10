@@ -185,3 +185,11 @@ def test_radio_switched_off_while_connected():
         assert wait_for(lambda: h.link.state.link is Link.CONNECTED)
         fake.powered = False
         assert wait_for(lambda: h.link.state.link is Link.NO_REPLY)
+
+
+def test_band_change_uses_radio_memory():
+    with Harness() as h:
+        assert wait_for(lambda: h.link.state.link is Link.CONNECTED)
+        h.link.set_band(3)
+        assert wait_for(lambda: h.link.state.frequency == 7_185_000 and h.link.state.mode is Mode.LSB)
+        assert "BN03;" in h.fake.received

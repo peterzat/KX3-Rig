@@ -120,6 +120,7 @@ def open_serial(path: str):
 class _Pending:
     """Operator changes waiting to be applied; newer values replace older ones."""
 
+    band: int | None = None
     frequency: int | None = None
     mode: Mode | None = None
     data_submode: DataSubmode | None = None
@@ -130,7 +131,7 @@ class _Pending:
 
     def empty(self) -> bool:
         return (
-            self.frequency is None and self.mode is None and self.data_submode is None
+            self.band is None and self.frequency is None and self.mode is None and self.data_submode is None
             and self.bandwidth is None and self.power is None and self.cat_ptt is None
             and not self.extra
         )
@@ -193,6 +194,13 @@ class RadioLink:
         if self._thread:
             self._thread.join(timeout=3)
         self._thread = None
+
+    def set_band(self, number: int) -> None:
+        """Change band using the KX3's own per-band memory (frequency and mode)."""
+        with self._pending_lock:
+            self._pending.band = int(number)
+            self._pending.frequency = None
+        self._wake.set()
 
     def set_frequency(self, hz: int) -> None:
         with self._pending_lock:
@@ -381,15 +389,18 @@ class RadioLink:
             info = cat.parse_if(frame)
             if info:
                 changes = dict(
-                    frequency=info.frequency, transmitting=info.transmitting,
+                    transmitting=info.transmitting,
                     split=info.split, rit_on=info.rit_on, xit_on=info.xit_on,
                 )
+                # A reply that raced an operator tune would snap the display back.
+                if self._pending.frequency is None and self._pending.band is None:
+                    changes["frequency"] = info.frequency
                 if info.mode is not None:
                     changes["mode"] = info.mode
                 self._update(**changes)
         elif kind == "FA":
             f = cat.parse_fa(frame)
-            if f:
+            if f and self._pending.frequency is None:
                 self._update(frequency=f)
         elif kind == "MD":
             m = cat.parse_md(frame)
@@ -510,6 +521,13 @@ class RadioLink:
             pending, self._pending = self._pending, _Pending()
         if pending.empty():
             return
+        if pending.band is not None:
+            self._send(cat.set_band(pending.band))
+            time.sleep(0.4)  # band changes take up to 500 ms (Programmer's Reference p.3)
+            for command in ("IF;", "BW;", "DT;"):
+                reply = self._get(command, timeout=BAND_CHANGE_TIMEOUT)
+                if reply:
+                    self._dispatch(reply)
         if pending.frequency is not None:
             self._send(cat.set_frequency(pending.frequency))
             reply = self._get("FA;", timeout=BAND_CHANGE_TIMEOUT)

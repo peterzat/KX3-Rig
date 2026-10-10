@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import json
 import os
-from dataclasses import asdict, dataclass, field, fields
+from dataclasses import asdict, dataclass, fields
 
 LICENSE_CLASSES = ("Technician", "General", "Extra")
 
@@ -43,8 +43,8 @@ class Settings:
     ft8_tx_offset_hz: int = 1500
     # Serial port override; empty means auto-detect the Digirig.
     serial_port: str = ""
-    # Last-used frequency per band (band name -> Hz), restored on band change.
-    band_memory: dict[str, int] = field(default_factory=dict)
+    # Show the radio's audio on this computer's speakers.
+    listen: bool = True
 
     @property
     def grid4(self) -> str:

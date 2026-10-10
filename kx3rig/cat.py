@@ -83,8 +83,8 @@ SM_DB_K30 = [-54, -42, -36, -24, -12, -6, 0, 10, 15, 20, 30, 35, 40, 50, 55, 60]
 
 ALLOWED = re.compile(
     r"^(?:"
-    r"ID|OM|RVM|RVD|IF|TQ|SM|PO|SW|PC|MD|DT|BW|FA|FB|K2|K3|AI|PS"   # GETs
-    r"|FA\d{11}|MD[12345679]|DT[0-3]|BW\d{4}|PC\d{3}"              # SETs
+    r"ID|OM|RVM|RVD|IF|TQ|SM|PO|SW|PC|MD|DT|BW|FA|FB|K2|K3|AI|PS|BN"  # GETs
+    r"|FA\d{11}|MD[12345679]|DT[0-3]|BW\d{4}|PC\d{3}|BN(?:0\d|10)"  # SETs
     r"|K2[0-3]|AI[0-3]"                                             # restore meta state
     r"|TX|RX"                                                       # PTT (CAT fallback) and stop
     r");$"
@@ -114,6 +114,17 @@ def set_data_submode(sub: DataSubmode) -> str:
 def set_bandwidth(hz: int) -> str:
     tens = max(0, min(9999, round(hz / 10)))
     return f"BW{tens:04d};"
+
+
+def set_band(number: int) -> str:
+    """Band change through the radio's own band memory (BN, 00-10 = 160-6 m)."""
+    if number not in BAND_NUMBERS:
+        raise ValueError(f"no such band number: {number}")
+    return f"BN{number:02d};"
+
+
+def parse_bn(frame: str) -> int | None:
+    return _digits(frame, "BN", 2)
 
 
 def set_power(watts: float) -> str:
