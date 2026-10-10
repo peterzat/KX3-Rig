@@ -8,6 +8,7 @@ file can be edited by hand and survives upgrades.
 from __future__ import annotations
 
 import json
+import math
 import os
 from dataclasses import asdict, dataclass, fields
 
@@ -29,8 +30,9 @@ class Settings:
     # Empty until the operator sets them in Preferences; transmit is refused without a callsign.
     callsign: str = ""
     grid: str = ""
-    license_class: str = "General"
-    # Transmit power the app sets when you start transmitting, in watts.
+    # The most restrictive class until the operator chooses theirs in Preferences.
+    license_class: str = "Technician"
+    # Last transmit power chosen in the app, in watts (the radio keeps its own setting).
     power_w: float = 5.0
     # Hard ceiling for any power the app will request (AlexLoop digital limit).
     max_power_w: float = 10.0
@@ -54,7 +56,15 @@ class Settings:
 
     def clamp(self) -> None:
         if self.license_class not in LICENSE_CLASSES:
-            self.license_class = "General"
+            self.license_class = "Technician"
+        # Hand-edited files can hold NaN or strings; anything non-finite falls back.
+        defaults = Settings.__dataclass_fields__
+        for name in ("power_w", "max_power_w", "listen_volume", "voice_gain", "data_tx_level"):
+            value = getattr(self, name)
+            if not isinstance(value, (int, float)) or not math.isfinite(value):
+                setattr(self, name, defaults[name].default)
+        if not isinstance(self.ft8_tx_offset_hz, (int, float)) or not math.isfinite(self.ft8_tx_offset_hz):
+            self.ft8_tx_offset_hz = defaults["ft8_tx_offset_hz"].default
         self.callsign = self.callsign.strip().upper()
         self.grid = self.grid.strip()
         self.max_power_w = min(max(self.max_power_w, 0.1), 15.0)

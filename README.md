@@ -22,8 +22,9 @@ It is built for one station today: an Elecraft KX3 connected to an Ubuntu laptop
 - **Talk** with Hold to Talk, using the computer's microphone, in SSB, AM, or FM.
 - **Work FT8**: one click sets the radio up, decodes appear every 15 seconds, and
   double-clicking a CQ runs the whole contact and logs it in ADIF.
-- **Stay legal**: transmit is limited to your license class's privileges (General by default),
-  and the app explains why when it can't transmit somewhere.
+- **Stay legal**: transmit is limited to your license class's privileges (set your callsign,
+  grid, and class in Preferences first), and the app explains why when it can't transmit
+  somewhere.
 
 ![An FT8 contact in progress](docs/screenshots/ft8-contact.png)
 

@@ -287,10 +287,13 @@ class RadioPage(Gtk.Box):
         return f"{rf / 1e6:.4f} MHz  ·  {hz:.0f} Hz audio"
 
     def update(self, st: RadioState) -> None:
-        online = st.link is Link.CONNECTED
+        connected = st.link is Link.CONNECTED
+        # While transmitting, tuning controls are locked (the station refuses changes then).
+        online = connected and not (st.ptt or st.transmitting or self.station.talking)
         self._syncing = True
         try:
-            self.readout.set_online(online)
+            self.readout.set_online(connected)
+            self.readout.set_sensitive(online)
             if st.frequency != self.readout.frequency:
                 self.readout.set_frequency(st.frequency)
             band = bandplan.band_for(st.frequency)

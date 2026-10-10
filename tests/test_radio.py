@@ -205,3 +205,25 @@ def test_band_change_uses_radio_memory():
         h.link.set_band(3)
         assert wait_for(lambda: h.link.state.frequency == 7_185_000 and h.link.state.mode is Mode.LSB)
         assert "BN03;" in h.fake.received
+
+
+def test_ptt_dropped_when_radio_stops_answering():
+    fake = FakeKX3()
+    with Harness(fake) as h:
+        assert wait_for(lambda: h.link.state.link is Link.CONNECTED)
+        assert h.link.ptt(True, limit_s=60)
+        fake.powered = False
+        assert wait_for(lambda: fake.rts is False, timeout=5)
+        assert "watchdog" in h.events
+
+
+def test_tuning_queued_before_keydown_is_discarded():
+    fake = FakeKX3()
+    with Harness(fake) as h:
+        assert wait_for(lambda: h.link.state.link is Link.CONNECTED)
+        with h.link._pending_lock:
+            h.link._pending.frequency = 14_200_000   # queued, not yet applied
+        h.link.ptt(True, limit_s=5)
+        time.sleep(0.5)
+        h.link.ptt(False)
+    assert "FA00014200000;" not in fake.received

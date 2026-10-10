@@ -12,8 +12,6 @@ rebuilt when the system switches between light and dark.
 
 from __future__ import annotations
 
-import math
-
 import gi
 import numpy as np
 

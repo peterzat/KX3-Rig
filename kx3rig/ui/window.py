@@ -7,7 +7,7 @@ import gi
 gi.require_version("Gtk", "4.0")
 gi.require_version("Gdk", "4.0")
 gi.require_version("Adw", "1")
-from gi.repository import Adw, GLib, GObject, Gtk  # noqa: E402
+from gi.repository import Adw, GLib, Gtk  # noqa: E402
 
 from .. import bandplan  # noqa: E402
 from ..radio import Link  # noqa: E402
@@ -297,5 +297,3 @@ def Gio_menu():
     menu.append_section(None, section)
     return menu
 
-
-__all__ = ["MainWindow", "GObject"]

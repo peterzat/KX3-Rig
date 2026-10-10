@@ -13,7 +13,6 @@ import random
 import threading
 import time
 
-from . import cat
 from .cat import Mode
 
 

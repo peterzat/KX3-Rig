@@ -35,9 +35,11 @@ moment. Automated tests that transmit require a dummy load the operator has conf
   `fakeradio.FakeKX3` and synthesizes FT8 traffic that answers our transmissions. Demo contacts
   log to `kx3rig-demo-log.adi`, never the real log.
 
-**Visual review.** `--screenshot DIR` (with `KX3RIG_SHOTS=radio,ft8,qso,voice,connect`) renders
-the window to PNGs. When the desktop is locked or the display is off, GTK draws no frames; run
-inside a private headless compositor instead:
+**Visual review.** `--demo --screenshot DIR` renders the window to PNGs: `KX3RIG_SHOTS` picks
+plans from `radio,voice,ft8,qso`; `--demo off` or `--demo unplugged` capture the connect page.
+`--screenshot` refuses to run without `--demo` (the plans retune and transmit). When the
+desktop is locked or the display is off, GTK draws no frames; run inside a private headless
+compositor instead:
 
 ```bash
 dbus-run-session -- gnome-shell --headless --no-x11 --sm-disable \

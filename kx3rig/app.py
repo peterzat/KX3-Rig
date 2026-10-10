@@ -6,7 +6,6 @@ import argparse
 import logging
 import os
 import signal
-import subprocess
 import sys
 
 import gi
@@ -221,5 +220,3 @@ def main(argv: list[str] | None = None) -> int:
 if __name__ == "__main__":
     sys.exit(main())
 
-
-__all__ = ["main", "subprocess"]

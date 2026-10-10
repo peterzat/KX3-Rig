@@ -231,6 +231,11 @@ class RadioLink:
         ser = self._ser
         if on and (ser is None or self._state.link is not Link.CONNECTED):
             return False
+        if on:
+            # Tuning queued just before key-down was not covered by the
+            # license check made for this transmission; drop it.
+            with self._pending_lock:
+                self._pending = _Pending(power=self._pending.power)
         with self._rts_lock:
             if ser is not None:
                 try:
@@ -261,6 +266,9 @@ class RadioLink:
     def _run(self) -> None:
         try:
             while not self._stop.is_set():
+                if self._ptt_since is not None and self._state.link is not Link.CONNECTED:
+                    self.ptt(False)   # never stay keyed without a working CAT link
+                    self._on_event("watchdog", "Transmit stopped: lost contact with the radio.")
                 if self._ser is None:
                     self._try_connect()
                     if self._ser is None:
@@ -482,7 +490,14 @@ class RadioLink:
         self._apply_pending()
         transmitting = self._state.ptt or self._state.transmitting
         if transmitting:
-            for command in ("TQ;", "PO;") + (("SW;",) if (self._state.firmware or 0) >= 2.93 else ()):
+            reply = self._get("TQ;")
+            if reply is None:
+                # No answer while keyed: treat as lost contact (the run loop unkeys).
+                self._update(link=Link.NO_REPLY, transmitting=False)
+                self._on_event("no-reply", "The KX3 stopped answering.")
+                return
+            self._dispatch(reply)
+            for command in ("PO;",) + (("SW;",) if (self._state.firmware or 0) >= 2.93 else ()):
                 reply = self._get(command)
                 if reply:
                     self._dispatch(reply)

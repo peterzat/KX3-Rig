@@ -49,6 +49,13 @@ Source keys:
 - Meta state: Hamlib 4.5.5 sends `K22;` on every open and never restores it (HL `elecraft.c`), so
   after WSJT-X the radio is likely in K22. KX3-Rig reads `K2;`/`AI;`, sets `K20;`/`AI0;`, and
   restores the saved values on exit. K21/K23 corrupt mode readback (PR p.16).
+- The allow-list (`cat.ALLOWED`) and where each entry is documented: GETs `ID` `OM` `RVM` `RVD`
+  `IF` `TQ` `SM` `PO` `SW` `PC` `MD` `DT` `BW` `FA` `FB` `K2` `K3` `AI` `PS` `BN` (PR pp.7-27; all
+  GETs whose only documented effect is a reply, and the ones Hamlib sends on every KX3 open,
+  HL `elecraft_open`); SETs `FAnnnnnnnnnnn` (p.11), `MDn` (p.16), `DTn` (p.11), `BWnnnn` (p.8),
+  `PCnnn` (p.22), `BN00`-`BN10` (p.8), `K2n`/`AIn` to restore the operator's state (pp.4, 7, 14),
+  and `RX` (p.23, "terminates transmit in all modes"). Push-to-talk is the Digirig RTS line only;
+  `TX;` is not on the list.
 - Never sent (allow-list in `cat.py`): `TX`-capable switch emulation (`SWT16`, `SWH16` TUNE,
   `SWT44` ATU TUNE, `SWT11` message play, `SWH29` VOX), `KY` keying text, `PS0` (CAT cannot turn
   the radio back on), `BR` baud change, `MN`/`MP`/`MQ` menu access (no range checking; unlocks
@@ -114,7 +121,8 @@ phone segments too (97.305(a)).
 - `jt9` needs a 16-bit mono 12 kHz WAV and does not check the header: anything else decodes
   nothing, silently. The last six digits of the file name become the time stamp, so files are
   named `YYMMDD_HHMMSS.wav` (verified on WSJT-X 3.0.2).
-- Command: `jt9 -8 -d 2 -q -L 200 -H 3000 -f RXHZ -c MYCALL -x DXCALL -Q n -a DIR -t DIR file.wav`.
+- Command: `jt9 -8 -d 2 -q -L 200 -H 3000 -f RXHZ -c MYCALL -x DXCALL -Q n [-g DXGRID] -a DIR -t DIR
+  file.wav` (`-x b` when there is no partner).
   `-c` defaults to `K1ABC` and `-x` to `W9XYZ` silently, so both are always passed. `-Q` selects
   a-priori decoding for the QSO stage. `-d 2` takes about 1.5 s on this laptop; the work directory
   keeps `jt9_wisdom.dat`, which saves about a second.

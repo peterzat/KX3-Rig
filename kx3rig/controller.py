@@ -79,6 +79,7 @@ class Station(GObject.Object):
         self._rx = None
         self._voice = None
         self._data_tx = None
+        self._data_tx_token = None
         self._digirig_audio = None
         self._audio_timer = 0
         self._demo_source = None
@@ -272,40 +273,60 @@ class Station(GObject.Object):
     # --- data transmit (FT8, tune) ------------------------------------------------------------
 
     def play_data(self, samples: np.ndarray, rate: int, on_done=None, limit_s: float = 16.0) -> TxCheck:
-        """Key the radio and play generated audio. Caller has already run can_transmit()."""
+        """Key the radio and play generated audio. Caller has already run can_transmit().
+
+        on_done(ok) runs once on the main loop: ok is True when the audio played
+        to the end, False when it failed or was stopped. The radio is unkeyed
+        before on_done runs, and a stale completion (from a transmission that
+        was already stopped) never unkeys a newer one.
+        """
         from .audio import DataTransmit
 
         if self._data_tx is not None:
             return TxCheck(False, "Already transmitting.")
+        token = object()
 
-        def finished():
+        def finish(ok: bool) -> bool:
+            if self._data_tx_token is not token:
+                return False   # stopped already, or superseded
+            self._data_tx_token = None
             self._data_tx = None
             self.link.ptt(False)
             if on_done:
-                on_done()
+                on_done(ok)
             return False
+
+        def failed(msg: str) -> None:
+            tx = self._data_tx
+            finish(False)
+            if tx is not None and hasattr(tx, "stop"):
+                tx.stop()
+            self._emit_event("error", f"Transmit audio failed: {msg}")
 
         if not self.link.ptt(True, limit_s=limit_s):
             return TxCheck(False, "The radio did not accept push-to-talk.")
+        self._data_tx_token = token
         if self.demo:
             self._data_tx = object()
-            GLib.timeout_add(int(len(samples) / rate * 1000), finished)
+            GLib.timeout_add(int(len(samples) / rate * 1000), finish, True)
             return TxCheck(True)
         try:
             self._data_tx = DataTransmit(
                 samples, rate, self._digirig_audio.sink.name, self.settings.data_tx_level,
-                on_done=finished,
-                on_error=lambda msg: self._emit_event("error", f"Transmit audio: {msg}"),
+                on_done=lambda: finish(True),
+                on_error=failed,
             )
             self._data_tx.start()
         except Exception as exc:
             self._data_tx = None
+            self._data_tx_token = None
             self.link.ptt(False)
             return TxCheck(False, f"Could not play transmit audio: {exc}")
         return TxCheck(True)
 
     def stop_data_tx(self) -> None:
         tx, self._data_tx = self._data_tx, None
+        self._data_tx_token = None   # any pending completion is now stale
         if tx is not None and hasattr(tx, "stop"):
             tx.stop()
         if tx is not None:
