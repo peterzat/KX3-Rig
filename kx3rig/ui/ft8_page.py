@@ -162,6 +162,11 @@ class Ft8Page(Gtk.Box):
         strip.append(self.panel_toggle)
         box.append(strip)
 
+        self.clock_warning = Adw.Banner(title="This computer's clock isn't synchronized. "
+                                              "FT8 needs the time correct to within a second.")
+        self.clock_warning.set_revealed(not _clock_synchronized())
+        box.append(self.clock_warning)
+
         wf_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
         self.waterfall = Waterfall(self.station)
         self.waterfall.set_size_request(-1, 150)
@@ -192,11 +197,7 @@ class Ft8Page(Gtk.Box):
         self.list.set_placeholder(self.empty)
         self.scroller = Gtk.ScrolledWindow(hscrollbar_policy=Gtk.PolicyType.NEVER, vexpand=True)
         self.scroller.set_child(self.list)
-        # Follow new decodes while the list is scrolled to the bottom (like a chat).
-        self._stick = True
-        adj = self.scroller.get_vadjustment()
-        adj.connect("value-changed", self._on_scrolled)
-        adj.connect("changed", self._on_list_grew)
+
         card = Gtk.Frame()
         card.add_css_class("view")
         card.set_child(self.scroller)
@@ -331,14 +332,15 @@ class Ft8Page(Gtk.Box):
         self._row_count = 0
         self.decode_count.set_label("")
 
-    def _on_scrolled(self, adj) -> None:
-        self._stick = adj.get_value() >= adj.get_upper() - adj.get_page_size() - 40
-
-    def _on_list_grew(self, adj) -> None:
-        if self._stick:
-            adj.set_value(adj.get_upper() - adj.get_page_size())
+    def _scroll_to_end(self) -> bool:
+        adj = self.scroller.get_vadjustment()
+        adj.set_value(adj.get_upper() - adj.get_page_size())
+        return False
 
     def _on_decoded(self, slot: int, decodes: list[Decode]) -> None:
+        # Follow new decodes like a chat, unless the operator scrolled up to read.
+        adj = self.scroller.get_vadjustment()
+        at_bottom = adj.get_value() >= adj.get_upper() - adj.get_page_size() - 40
         if decodes or self._row_count:
             sep = Gtk.ListBoxRow(activatable=False, selectable=False)
             text = f"{_utc(slot)}  ·  {len(decodes)} decode{'s' if len(decodes) != 1 else ''}"
@@ -356,6 +358,8 @@ class Ft8Page(Gtk.Box):
             self._row_count -= 1
         total = sum(len(v) for v in self.engine.decodes.values())
         self.decode_count.set_label(f"{total} decodes" if total else "")
+        if at_bottom:
+            GLib.timeout_add(150, self._scroll_to_end)   # after the new rows are laid out
         self._refresh_panel()
 
     def _on_transmitting(self, on: bool, text: str) -> None:
@@ -490,6 +494,18 @@ class Ft8Page(Gtk.Box):
                 else:
                     self.contact_status.set_label(f"Next transmission in {wait:.0f} s")
         return GLib.SOURCE_CONTINUE
+
+
+def _clock_synchronized() -> bool:
+    """systemd's view of NTP sync; assume fine if it can't be asked."""
+    import subprocess
+
+    try:
+        out = subprocess.run(["timedatectl", "show", "-p", "NTPSynchronized", "--value"],
+                             capture_output=True, text=True, timeout=3).stdout.strip()
+    except (OSError, subprocess.SubprocessError):
+        return True
+    return out != "no"
 
 
 def GObject_BIDIRECTIONAL():

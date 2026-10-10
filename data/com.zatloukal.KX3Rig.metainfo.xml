@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>com.zatloukal.KX3Rig</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>GPL-3.0-or-later</project_license>
+  <name>KX3-Rig</name>
+  <summary>Control your Elecraft KX3</summary>
+  <developer id="com.zatloukal">
+    <name>Peter Zatloukal</name>
+  </developer>
+  <description>
+    <p>
+      KX3-Rig is a friendly controller for the Elecraft KX3 connected through a Digirig.
+      Plug in the radio, open the app, and start tuning.
+    </p>
+    <ul>
+      <li>Big, directly tunable frequency display with band and mode controls</li>
+      <li>Listen to the radio on your computer and talk through its microphone</li>
+      <li>A clear waterfall of the band around your frequency</li>
+      <li>FT8 with one-click setup, automatic contact sequencing, and logging</li>
+      <li>Transmit is limited to your license class privileges</li>
+    </ul>
+  </description>
+  <launchable type="desktop-id">com.zatloukal.KX3Rig.desktop</launchable>
+  <url type="homepage">https://github.com/peterzat/KX3-Rig</url>
+  <url type="bugtracker">https://github.com/peterzat/KX3-Rig/issues</url>
+  <url type="vcs-browser">https://github.com/peterzat/KX3-Rig</url>
+  <branding>
+    <color type="primary" scheme_preference="light">#c4dcf7</color>
+    <color type="primary" scheme_preference="dark">#1a3c66</color>
+  </branding>
+  <content_rating type="oars-1.1"/>
+  <recommends>
+    <control>pointing</control>
+    <control>keyboard</control>
+  </recommends>
+  <requires>
+    <display_length compare="ge">768</display_length>
+  </requires>
+  <screenshots>
+    <screenshot type="default">
+      <image>https://raw.githubusercontent.com/peterzat/KX3-Rig/main/docs/screenshots/radio-dark.png</image>
+      <caption>Tune, listen, and talk</caption>
+    </screenshot>
+    <screenshot>
+      <image>https://raw.githubusercontent.com/peterzat/KX3-Rig/main/docs/screenshots/ft8-contact.png</image>
+      <caption>FT8 contacts that run themselves</caption>
+    </screenshot>
+  </screenshots>
+  <releases>
+    <release version="0.1.0" date="2026-10-10">
+      <description>
+        <p>First release: tuning, listening, voice transmit, waterfall, and FT8.</p>
+      </description>
+    </release>
+  </releases>
+</component>

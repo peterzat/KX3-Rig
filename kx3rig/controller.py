@@ -82,6 +82,7 @@ class Station(GObject.Object):
         self._digirig_audio = None
         self._audio_timer = 0
         self._demo_source = None
+        self._rx_error = ""
 
         if demo:
             from .fakeradio import FakeKX3
@@ -316,6 +317,7 @@ class Station(GObject.Object):
             self.emit("audio-changed", status)
 
     def _check_audio(self) -> bool:
+        """Every 2 s: start or stop receive audio as the Digirig comes and goes."""
         try:
             found = devices.find_digirig_audio()
         except Exception as exc:
@@ -326,8 +328,10 @@ class Station(GObject.Object):
             self._start_rx(found)
         elif not found.source and self._rx is not None:
             self._stop_rx()
-        error = self.audio.error if self._rx is not None or not found.source else ""
-        self._set_audio(AudioStatus(rx=self._rx is not None, tx=found.sink is not None, error=error))
+        if not found.source:
+            self._rx_error = ""
+        self._set_audio(AudioStatus(rx=self._rx is not None, tx=found.sink is not None,
+                                    error=self._rx_error if self._rx is None else ""))
         return True
 
     def _listen_sink(self) -> str | None:
@@ -355,15 +359,17 @@ class Station(GObject.Object):
             rx.start()
         except Exception as exc:
             log.warning("receive audio failed to start: %s", exc)
-            self._set_audio(AudioStatus(rx=False, tx=found.sink is not None, error=str(exc)))
+            self._rx_error = f"Receive audio failed: {exc}"
             return
         self._rx = rx
+        self._rx_error = ""
         self._apply_listen()
 
     def _on_rx_error(self, msg: str) -> bool:
         log.warning("receive audio error: %s", msg)
         self._stop_rx()
-        self._set_audio(AudioStatus(rx=False, tx=self.audio.tx, error=msg))
+        self._rx_error = f"Receive audio stopped: {msg}"
+        self._set_audio(AudioStatus(rx=False, tx=self.audio.tx, error=self._rx_error))
         return False
 
     def _stop_rx(self) -> None:

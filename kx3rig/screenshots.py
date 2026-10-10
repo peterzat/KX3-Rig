@@ -46,6 +46,18 @@ def run(app, out_dir: str) -> None:
                   (t + 800, lambda: capture(win, os.path.join(out_dir, f"connect-{app.demo}-dark.png")))]
         t += 1600
     else:
+        if "voice" in plan:
+            from .cat import Mode
+            steps += [(t - 2500, lambda: app.station.link.set_frequency(14_285_000)),
+                      (t - 2000, lambda: app.station.link.set_mode(Mode.USB)),
+                      (t, lambda: win.show_view("radio")),
+                      (t + 5000, lambda: capture(win, os.path.join(out_dir, "voice-light.png"))),
+                      (t + 5200, lambda: style.set_color_scheme(Adw.ColorScheme.FORCE_DARK)),
+                      (t + 9000, lambda: capture(win, os.path.join(out_dir, "voice-dark.png"))),
+                      (t + 9200, lambda: style.set_color_scheme(Adw.ColorScheme.DEFAULT)),
+                      (t + 9400, lambda: app.station.link.set_frequency(14_074_000)),
+                      (t + 9600, lambda: app.station.link.set_mode(Mode.DATA))]
+            t += 10000
         if "radio" in plan:
             steps += [(t, lambda: win.show_view("radio")),
                       (t + 3000, lambda: capture(win, os.path.join(out_dir, "radio-light.png"))),
@@ -79,8 +91,11 @@ def run(app, out_dir: str) -> None:
                       (t + 22000, lambda: capture(win, os.path.join(out_dir, "qso-1.png"))),
                       (t + 52000, lambda: capture(win, os.path.join(out_dir, "qso-2.png"))),
                       (t + 52300, lambda: style.set_color_scheme(Adw.ColorScheme.FORCE_DARK)),
-                      (t + 67000, lambda: capture(win, os.path.join(out_dir, "qso-3-dark.png")))]
-            t += 67500
+                      (t + 67000, lambda: capture(win, os.path.join(out_dir, "qso-3-dark.png"))),
+                      (t + 84000, lambda: capture(win, os.path.join(out_dir, "qso-4-logged-dark.png"))),
+                      (t + 84300, lambda: style.set_color_scheme(Adw.ColorScheme.DEFAULT)),
+                      (t + 86000, lambda: capture(win, os.path.join(out_dir, "qso-4-logged-light.png")))]
+            t += 86500
     steps.append((t + 300, lambda: win.close()))
     for delay, fn in steps:
         GLib.timeout_add(delay, lambda f=fn: (f(), False)[1])

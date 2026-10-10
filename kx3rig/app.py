@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import logging
 import os
+import signal
 import subprocess
 import sys
 
@@ -117,24 +118,35 @@ class Application(Adw.Application):
         if self.demo:
             self.window.add_css_class("devel")
         self.station.start()
+        for sig in (signal.SIGINT, signal.SIGTERM):
+            GLib.unix_signal_add(GLib.PRIORITY_HIGH, sig, self._on_signal)
+        if self.demo == "unplugged":
+            from .controller import AudioStatus
+            self.station._set_audio(AudioStatus())   # no Digirig: no sound card either
         self.engine.start()
-        self.window.connect("close-request", self._on_close)
         self.window.present()
         if self.screenshot_dir:
             from .screenshots import run as screenshots
             screenshots(self, self.screenshot_dir)
 
-    def _on_close(self, window) -> bool:
+    def _on_signal(self) -> bool:
+        self.quit()
+        return GLib.SOURCE_REMOVE
+
+    def do_shutdown(self) -> None:
+        # Always runs on quit (window closed, Ctrl+Q, SIGINT/SIGTERM): stop
+        # transmitting, drop RTS, restore the radio's CAT state.
         if self.engine:
             self.engine.stop()
         if self.station:
             if self.demo:
+                self.station.halt_all()
                 self.station.link.stop()
                 if self.station._demo_source:
                     self.station._demo_source.stop()
             else:
                 self.station.shutdown()
-        return False
+        Adw.Application.do_shutdown(self)
 
     def _preferences(self) -> None:
         from .ui import preferences

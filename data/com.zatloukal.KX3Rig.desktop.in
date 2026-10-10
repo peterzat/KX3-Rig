@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=KX3-Rig
+GenericName=Radio Control
+Comment=Control your Elecraft KX3: tune, listen, talk, and work FT8
+Exec=@EXEC@
+Icon=com.zatloukal.KX3Rig
+Terminal=false
+Categories=AudioVideo;Audio;HamRadio;GTK;
+Keywords=ham;amateur;radio;transceiver;elecraft;kx3;ft8;cat;waterfall;digirig;
+StartupNotify=true
+SingleMainWindow=true

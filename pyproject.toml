@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "kx3-rig"
+version = "0.1.0"
+description = "A friendly controller for the Elecraft KX3: tune, listen, talk, and work FT8"
+readme = "README.md"
+license = { text = "GPL-3.0-or-later" }
+authors = [{ name = "Peter Zatloukal" }]
+requires-python = ">=3.12"
+dependencies = ["numpy>=1.26", "pyserial>=3.5"]
+
+[project.scripts]
+kx3-rig = "kx3rig.app:main"
+
+[tool.setuptools.packages.find]
+include = ["kx3rig*"]
+
+[tool.setuptools.package-data]
+kx3rig = ["ui/style.css"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
