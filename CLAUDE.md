@@ -44,7 +44,7 @@ compositor instead:
 ```bash
 dbus-run-session -- gnome-shell --headless --no-x11 --sm-disable \
   --virtual-monitor 1280x960 --wayland-display kx3shot &
-WAYLAND_DISPLAY=kx3shot .venv/bin/kx3-rig --demo --screenshot /tmp/shots
+WAYLAND_DISPLAY=kx3shot .venv/bin/kx3-rig --demo --screenshot "$(mktemp -d)"
 ```
 
 **Tests:** `./run-tests.sh` must pass with no radio attached. The FT8 round-trip tests need the

@@ -19,6 +19,12 @@ from dataclasses import dataclass
 from enum import Enum
 
 TERMINATOR = b";"
+_ASCII_DIGITS = re.compile(r"[0-9]+")
+
+
+def _digits_only(text: str) -> bool:
+    """ASCII digits only; str.isdigit() also accepts superscripts like '\u00b2'."""
+    return bool(_ASCII_DIGITS.fullmatch(text))
 
 
 class Mode(Enum):
@@ -282,7 +288,7 @@ def parse_om(frame: str) -> Options | None:
         return None
     body = frame
     pid = body[13:15]
-    if not pid.isdigit():
+    if not _digits_only(pid):
         return None
     return Options(
         product_id=int(pid),
@@ -313,7 +319,7 @@ def parse_if(frame: str) -> Info | None:
         return None
     freq = frame[2:13]
     sign, offset = frame[18], frame[19:23]
-    if not freq.isdigit() or sign not in "+- " or not offset.isdigit():
+    if not _digits_only(freq) or sign not in "+- " or not _digits_only(offset):
         return None
     try:
         mode = Mode(int(frame[29]))

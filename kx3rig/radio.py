@@ -233,14 +233,21 @@ class RadioLink:
         p = self._pending
         return self._tuning or any(v is not None for v in (p.band, p.frequency, p.mode, p.data_submode))
 
-    def ptt(self, on: bool, limit_s: float = 120.0) -> bool:
+    def ptt(self, on: bool, limit_s: float = 120.0, expect_frequency: int | None = None,
+            expect_mode: Mode | None = None) -> bool:
         """Key or unkey the transmitter via the Digirig RTS line.
 
         Returns False if not connected. limit_s is the watchdog: transmit is
-        dropped automatically after that many seconds.
+        dropped automatically after that many seconds. expect_frequency and
+        expect_mode are what the caller's license check saw; keying is refused
+        if the radio's live state no longer matches them.
         """
         ser = self._ser
         if on and (ser is None or self._state.link is not Link.CONNECTED):
+            return False
+        if on and expect_frequency is not None and self._state.frequency != expect_frequency:
+            return False
+        if on and expect_mode is not None and self._state.mode is not expect_mode:
             return False
         if on:
             # The license check ran against the optimistic frequency and mode, so
@@ -302,6 +309,8 @@ class RadioLink:
                 except Exception:
                     log.exception("link error")
                     self._drop_port()
+                    # Tell the station so any transmission in flight ends cleanly.
+                    self._on_event("lost", "The radio link hit an error and was reset.")
         finally:
             self._shutdown()
 

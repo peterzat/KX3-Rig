@@ -96,3 +96,23 @@ def test_split_or_xit_blocks_transmit(station, flag):
     assert pump(lambda: getattr(station.radio, flag))
     check = station.can_transmit(Mode.DATA, 1500, 1550)
     assert not check.allowed and "SPLIT" in check.reason
+
+
+def test_power_above_limit_blocks_transmit(station):
+    station.settings.max_power_w = 3.0
+    assert pump(lambda: station.radio.power_set == 5)
+    check = station.can_transmit(Mode.DATA, 1500, 1550)
+    assert not check.allowed and "5 W" in check.reason
+
+
+def test_ft8_requires_data_a(station):
+    from kx3rig.cat import DataSubmode
+    from kx3rig.ft8.engine import Ft8Engine
+
+    engine = Ft8Engine(station, demo=True)
+    assert pump(lambda: station.radio.data_submode is DataSubmode.DATA_A)
+    assert engine.check_tx().allowed
+    station.link.set_mode(Mode.DATA, DataSubmode.AFSK_A)
+    assert pump(lambda: station.radio.data_submode is DataSubmode.AFSK_A)
+    check = engine.check_tx()
+    assert not check.allowed and "DATA A" in check.reason

@@ -26,7 +26,7 @@ gi.require_version("GLib", "2.0")
 from gi.repository import GLib, GObject  # noqa: E402
 
 from .. import bandplan, config  # noqa: E402
-from ..cat import Mode  # noqa: E402
+from ..cat import DataSubmode, Mode  # noqa: E402
 from . import adif, encode  # noqa: E402
 from .decode import PERIOD, Jt9, SlotRecorder, slot_of, slot_start  # noqa: E402
 from .messages import parse  # noqa: E402
@@ -122,6 +122,10 @@ class Ft8Engine(GObject.Object):
             return bandplan.TxCheck(False, "WSJT-X's ft8code isn't installed, so FT8 can't be encoded.")
         if self.station.radio.mode is not Mode.DATA:
             return bandplan.TxCheck(False, "Switch the radio to DATA mode to transmit FT8.")
+        sub = self.station.radio.data_submode
+        if sub is not None and sub is not DataSubmode.DATA_A:
+            # Other submodes change sideband and audio handling (KX3 Owner's Manual p.18).
+            return bandplan.TxCheck(False, "Set the KX3's data submode to DATA A. Tune Radio to FT8 does this.")
         return self.station.can_transmit(Mode.DATA, self.tx_offset, self.tx_offset + SIGNAL_WIDTH_HZ)
 
     def answer(self, decode: Decode) -> bandplan.TxCheck:
@@ -274,6 +278,8 @@ class Ft8Engine(GObject.Object):
             return
         if self._decoding_slot == slot - 1:
             return  # the reply depends on what was just heard; wait for jt9
+        if self.station.link.tuning_pending:
+            return  # a frequency or mode change is still reaching the radio; retry next tick
         text = seq.next_message()
         if not text:
             return

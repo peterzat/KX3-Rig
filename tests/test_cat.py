@@ -143,3 +143,10 @@ def test_band_number():
     assert cat.parse_bn("BN10;") == 10
     with pytest.raises(ValueError):
         cat.set_band(16)
+
+
+def test_parsers_reject_non_ascii_digits():
+    # latin-1 0xB2 decodes to a superscript two: isdigit() is True but int() fails.
+    bad_if = "IF0001407400\u00b2" + IF_DATA_RX[13:]
+    assert len(bad_if) == 38 and cat.parse_if(bad_if) is None
+    assert cat.parse_om("OM A-F-------0\u00b2;") is None

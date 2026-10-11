@@ -25,7 +25,7 @@ if [[ ! -x .venv/bin/python ]]; then
   python3 -m venv --system-site-packages .venv
 fi
 .venv/bin/pip install --quiet --upgrade pip
-.venv/bin/pip install --quiet -e .
+.venv/bin/pip install --quiet -c constraints.txt -e .
 
 mkdir -p "$DATA/applications" "$DATA/icons/hicolor/scalable/apps" "$DATA/icons/hicolor/symbolic/apps" "$DATA/metainfo"
 sed "s|@EXEC@|$REPO/.venv/bin/kx3-rig|" data/$APP_ID.desktop.in > "$DATA/applications/$APP_ID.desktop"

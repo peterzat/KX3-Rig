@@ -38,7 +38,8 @@ anything verified in [references.md](references.md) ("Open items to verify on th
 - Press **Tune** again, or Esc, mid-tone: the KX3 unkeys at once.
 - Radio view, USB at 14.285 MHz: **Hold to Talk** keys the radio; speak and set the KX3 mic
   gain for about 5 ALC bars (open item 6). Release: it unkeys.
-- Hold to Talk on 14.200 MHz (Extra-only phone): the button is disabled and says why.
+- General class only: Hold to Talk on 14.200 MHz (Extra-only phone) is disabled and says why.
+  (An Extra licensee may transmit there, so skip this step if your class is Extra.)
 - Quit the app while transmitting a Tune tone: the radio unkeys.
 
 ## 4. On the air (AlexLoop)

@@ -1,0 +1,8 @@
+# Known-good versions, tested together on Ubuntu 24.04 (Python 3.12).
+# install.sh installs with these as constraints; update deliberately and rerun the tests.
+numpy==2.5.4
+pyserial==3.5
+pytest==9.1.1
+pluggy==1.6.0
+iniconfig==2.3.1
+packaging==26.3

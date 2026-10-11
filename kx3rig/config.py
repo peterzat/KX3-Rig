@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import math
 import os
+import shutil
 from dataclasses import asdict, dataclass, fields
 
 LICENSE_CLASSES = ("Technician", "General", "Extra")
@@ -67,9 +68,10 @@ class Settings:
             self.license_class = "Technician"
         for name in ("power_w", "max_power_w", "listen_volume", "voice_gain", "data_tx_level"):
             value = getattr(self, name)
-            if not isinstance(value, (int, float)) or not math.isfinite(value):
+            if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value):
                 setattr(self, name, defaults[name].default)
-        if not isinstance(self.ft8_tx_offset_hz, (int, float)) or not math.isfinite(self.ft8_tx_offset_hz):
+        offset = self.ft8_tx_offset_hz
+        if isinstance(offset, bool) or not isinstance(offset, (int, float)) or not math.isfinite(offset):
             self.ft8_tx_offset_hz = defaults["ft8_tx_offset_hz"].default
         self.callsign = self.callsign.strip().upper()
         self.grid = self.grid.strip()
@@ -98,8 +100,13 @@ def load(path: str | None = None) -> Settings:
         return from_dict(raw)
     except FileNotFoundError:
         return Settings()
-    except (OSError, ValueError, TypeError, AttributeError):
-        # A corrupt file should never stop the app from starting.
+    except (OSError, ValueError, TypeError, AttributeError, OverflowError):
+        # A corrupt file should never stop the app from starting. Keep a copy so
+        # saving defaults on exit does not silently discard hand edits.
+        try:
+            shutil.copyfile(path, path + ".bad")
+        except OSError:
+            pass
         return Settings()
 
 

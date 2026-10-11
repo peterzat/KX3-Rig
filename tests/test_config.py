@@ -53,3 +53,15 @@ def test_null_and_wrong_types_fall_back(tmp_path):
     path.write_text('{"serial_port": null, "callsign": 7, "listen": "yes", "grid": null}')
     s = config.load(str(path))
     assert (s.serial_port, s.callsign, s.listen, s.grid) == ("", "", True, "")
+
+
+def test_bools_huge_numbers_and_corrupt_files(tmp_path):
+    path = tmp_path / "settings.json"
+    path.write_text('{"max_power_w": true, "voice_gain": 1e999999}')
+    s = config.load(str(path))
+    assert s.max_power_w == 10.0 and s.voice_gain == 1.0
+    path.write_text('{"power_w": 1' + "0" * 400 + '}')
+    assert config.load(str(path)) == config.Settings()
+    path.write_text("{oops")
+    config.load(str(path))
+    assert (tmp_path / "settings.json.bad").read_text() == "{oops"

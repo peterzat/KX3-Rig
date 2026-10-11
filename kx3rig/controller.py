@@ -209,6 +209,10 @@ class Station(GObject.Object):
         mode = mode or self.radio.mode
         if mode is None or self.radio.frequency <= 0:
             return TxCheck(False, "Waiting for the radio.")
+        power = self.radio.power_set
+        if power is not None and power > self.settings.max_power_w + 0.05:
+            return TxCheck(False, f"The KX3 is set to {power:g} W, above your {self.settings.max_power_w:g} W "
+                                  "limit. Lower it with the Power control first.")
         if self.radio.split or self.radio.xit_on:
             # The license check only sees VFO A; SPLIT or XIT would transmit elsewhere.
             return TxCheck(False, "Turn off SPLIT and XIT on the KX3 to transmit.")
@@ -251,7 +255,8 @@ class Station(GObject.Object):
         except Exception as exc:
             self._voice = None
             return TxCheck(False, f"Could not open the microphone: {exc}")
-        if not self.link.ptt(True, limit_s=VOICE_TX_LIMIT_S):
+        if not self.link.ptt(True, limit_s=VOICE_TX_LIMIT_S, expect_frequency=self.radio.frequency,
+                             expect_mode=self.radio.mode):
             self._stop_voice_stream()
             if self.link.tuning_pending:
                 return TxCheck(False, "Still tuning. Try again in a moment.")
@@ -313,7 +318,10 @@ class Station(GObject.Object):
                 tx.stop()
             self._emit_event("error", f"Transmit audio failed: {msg}")
 
-        if not self.link.ptt(True, limit_s=limit_s):
+        if self.link.tuning_pending:
+            return TxCheck(False, "Still tuning. Try again in a moment.")
+        if not self.link.ptt(True, limit_s=limit_s, expect_frequency=self.radio.frequency,
+                             expect_mode=self.radio.mode):
             return TxCheck(False, "The radio did not accept push-to-talk.")
         self._data_tx_token = token
         self._data_tx_finish = finish

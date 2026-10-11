@@ -258,3 +258,14 @@ def test_never_keys_on_a_frequency_other_than_the_one_checked():
         assert h.link.ptt(True, limit_s=5)
         h.link.ptt(False)
     assert fake.keyed_on == [checked]
+
+
+def test_ptt_refused_when_live_state_differs_from_what_was_checked():
+    fake = FakeKX3()
+    with Harness(fake) as h:
+        assert wait_for(lambda: h.link.state.frequency == 14_074_000)
+        assert not h.link.ptt(True, expect_frequency=14_230_000, expect_mode=Mode.DATA)
+        assert not h.link.ptt(True, expect_frequency=14_074_000, expect_mode=Mode.USB)
+        assert fake.rts is False
+        assert h.link.ptt(True, limit_s=5, expect_frequency=14_074_000, expect_mode=Mode.DATA)
+        h.link.ptt(False)
