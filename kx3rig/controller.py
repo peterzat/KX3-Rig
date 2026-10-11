@@ -82,6 +82,8 @@ class Station(GObject.Object):
         self._data_tx_token = None
         self._data_tx_finish = None   # finish(ok) of the transmission in flight
         self._digirig_audio = None
+        self._audio_nodes: list[devices.AudioNode] = []   # latest PipeWire scan
+        self._audio_scan_busy = False
         self._audio_timer = 0
         self._demo_source = None
         self._rx_error = ""
@@ -120,8 +122,8 @@ class Station(GObject.Object):
             self._demo_source.start()
             self._set_audio(AudioStatus(rx=True, tx=True))
         else:
-            self._check_audio()
             self._audio_timer = GLib.timeout_add_seconds(2, self._check_audio)
+            self._check_audio()
 
     def shutdown(self) -> None:
         self.stop_talking()
@@ -243,7 +245,7 @@ class Station(GObject.Object):
                 # the default source, which may be the Digirig).
                 mic = default_node_name("source")
                 if not mic or devices.DIGIRIG_NODE_RE.search(mic):
-                    mic = devices.pick_mic(mic, devices.list_audio_nodes())
+                    mic = devices.pick_mic(mic, self._audio_nodes)
                 if mic is None:
                     return TxCheck(False, "No microphone found other than the Digirig. Connect a microphone to talk.")
                 self._voice = VoiceTransmit(
@@ -382,12 +384,23 @@ class Station(GObject.Object):
             self.emit("audio-changed", status)
 
     def _check_audio(self) -> bool:
-        """Every 2 s: start or stop receive audio as the Digirig comes and goes."""
-        try:
-            found = devices.find_digirig_audio()
-        except Exception as exc:
-            log.warning("audio device scan failed: %s", exc)
-            return True
+        """Every 2 s: rescan PipeWire in a separate process (never blocks the window)."""
+        if not self._audio_scan_busy:
+            self._audio_scan_busy = True
+            try:
+                devices.scan_audio_nodes(self._on_audio_nodes)
+            except Exception:
+                log.exception("audio device scan failed to start")
+                self._audio_scan_busy = False   # retry on the next tick
+        return True
+
+    def _on_audio_nodes(self, nodes: list[devices.AudioNode] | None) -> bool:
+        """Start or stop receive audio as the Digirig comes and goes."""
+        self._audio_scan_busy = False
+        if nodes is None or not self._audio_timer:   # scan failed (keep the current state), or shut down
+            return False
+        self._audio_nodes = nodes
+        found = devices.pick_digirig_audio(nodes)
         self._digirig_audio = found
         if found.source and self._rx is None:
             self._start_rx(found)
@@ -397,7 +410,7 @@ class Station(GObject.Object):
             self._rx_error = ""
         self._set_audio(AudioStatus(rx=self._rx is not None, tx=found.sink is not None,
                                     error=self._rx_error if self._rx is None else ""))
-        return True
+        return False
 
     def _listen_sink(self) -> str | None:
         from .audio import default_node_name
@@ -406,7 +419,7 @@ class Station(GObject.Object):
         if name and devices.DIGIRIG_NODE_RE.search(name):
             # The default output is the Digirig: playing radio audio there would
             # transmit it. Pick any other output instead, or none.
-            others = [n for n in devices.list_audio_nodes() if n.is_sink and not n.is_digirig]
+            others = [n for n in self._audio_nodes if n.is_sink and not n.is_digirig]
             return others[0].name if others else None
         return name
 

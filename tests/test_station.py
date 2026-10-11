@@ -353,3 +353,51 @@ def test_unknown_submode_refuses_ft8(station, engine):
     station.radio = dataclasses.replace(station.radio, data_submode=None)
     check = engine.check_tx()
     assert not check.allowed and "submode" in check.reason
+
+
+def test_audio_scan_tracks_the_digirig(monkeypatch):
+    from kx3rig import devices
+    from kx3rig.devices import AudioNode
+
+    digirig_in = "alsa_input.usb-C-Media_Electronics_Inc._USB_PnP_Sound_Device-00.mono-fallback"
+    digirig_out = "alsa_output.usb-C-Media_Electronics_Inc._USB_PnP_Sound_Device-00.analog-stereo"
+    s = Station(config.Settings(), demo=False)   # never started: no serial port or audio opened
+    started, stopped, scans = [], [], []
+    monkeypatch.setattr(s, "_start_rx", lambda found: (started.append(found.source.name), setattr(s, "_rx", object())))
+    monkeypatch.setattr(s, "_stop_rx", lambda: (stopped.append(True), setattr(s, "_rx", None)))
+    monkeypatch.setattr(devices, "scan_audio_nodes", scans.append)
+    s._audio_timer = 1                           # as if start() ran
+
+    s._check_audio()
+    s._check_audio()                             # a scan is still running: no second one
+    assert len(scans) == 1
+
+    s._on_audio_nodes([AudioNode(digirig_in, "Audio/Source"), AudioNode(digirig_out, "Audio/Sink")])
+    assert started == [digirig_in] and s.audio.rx and s.audio.tx
+    s._check_audio()
+    assert len(scans) == 2                       # the next scan may start once one finishes
+
+    s._on_audio_nodes(None)                      # failed scan: keep what we have
+    assert s.audio.rx and not stopped
+
+    s._on_audio_nodes([])                        # Digirig unplugged
+    assert stopped and not s.audio.rx and not s.audio.tx
+
+    s._audio_timer = 0                           # shut down: a late result changes nothing
+    s._on_audio_nodes([AudioNode(digirig_in, "Audio/Source")])
+    assert started == [digirig_in]
+
+
+def test_audio_scan_that_fails_to_start_retries(monkeypatch):
+    from kx3rig import devices
+
+    s = Station(config.Settings(), demo=False)
+    calls = []
+
+    def broken(on_done):
+        calls.append(on_done)
+        raise RuntimeError("cannot spawn")
+    monkeypatch.setattr(devices, "scan_audio_nodes", broken)
+    s._check_audio()
+    s._check_audio()                             # the busy flag was released: a second attempt
+    assert len(calls) == 2 and not s._audio_scan_busy

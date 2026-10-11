@@ -9,11 +9,17 @@ collectors at the bottom do the I/O.
 from __future__ import annotations
 
 import glob
+import json
+import logging
 import os
 import re
 from dataclasses import dataclass
 
+log = logging.getLogger(__name__)
+
 BYID_DIR = "/dev/serial/by-id"
+PW_DUMP = ["pw-dump"]
+PW_DUMP_TIMEOUT_S = 5
 
 # Matches both CP2102 and CP2102N by-id names, e.g.
 # usb-Silicon_Labs_CP2102N_USB_to_UART_Bridge_Controller_<serial>-if00-port0
@@ -146,32 +152,63 @@ def find_serial_port() -> str | None:
     return pick_serial_port(byid, glob.glob("/dev/ttyUSB*"))
 
 
-def list_audio_nodes() -> list[AudioNode]:
-    """Enumerate PipeWire audio nodes through GStreamer's device monitor."""
-    import gi
+def scan_audio_nodes(on_done) -> None:
+    """List PipeWire audio nodes with `pw-dump`, without blocking the main loop.
 
-    gi.require_version("Gst", "1.0")
-    from gi.repository import Gst
+    Calls on_done(nodes) on the main loop, or on_done(None) when the scan fails
+    or takes longer than PW_DUMP_TIMEOUT_S. Discovery runs in a separate process
+    because an in-process GStreamer DeviceMonitor deadlocks once a pipewiresrc
+    in the same process is streaming (reproduced with PipeWire 1.0.5 and the
+    Digirig, 2026-10-11).
+    """
+    from gi.repository import Gio, GLib
 
-    if not Gst.is_initialized():
-        Gst.init(None)
-    monitor = Gst.DeviceMonitor()
-    monitor.add_filter("Audio/Source", None)
-    monitor.add_filter("Audio/Sink", None)
-    nodes: list[AudioNode] = []
-    if not monitor.start():
-        return nodes
     try:
-        for dev in monitor.get_devices() or []:
-            props = dev.get_properties()
-            if props is None or not props.has_field("node.name"):
-                continue
-            media_class = props.get_value("media.class") if props.has_field("media.class") else dev.get_device_class()
-            nodes.append(AudioNode(props.get_value("node.name"), media_class, dev.get_display_name()))
-    finally:
-        monitor.stop()
+        proc = Gio.Subprocess.new(PW_DUMP, Gio.SubprocessFlags.STDOUT_PIPE | Gio.SubprocessFlags.STDERR_SILENCE)
+    except GLib.Error as exc:
+        log.warning("audio device scan failed: %s", exc.message)
+        GLib.idle_add(on_done, None)
+        return
+    cancel = Gio.Cancellable()
+    state = {"timer": 0}
+
+    def expired() -> bool:
+        state["timer"] = 0
+        cancel.cancel()
+        proc.force_exit()
+        return False
+
+    def finished(p, result) -> None:
+        if state["timer"]:
+            GLib.source_remove(state["timer"])
+        try:
+            _, out, _ = p.communicate_utf8_finish(result)
+            nodes = parse_pw_dump(out or "")
+        except Exception as exc:   # anything (e.g. RecursionError from json): on_done must still run
+            log.warning("audio device scan failed: %s", getattr(exc, "message", exc))
+            nodes = None
+        on_done(nodes)
+
+    state["timer"] = GLib.timeout_add_seconds(PW_DUMP_TIMEOUT_S, expired)
+    proc.communicate_utf8_async(None, cancel, finished)
+
+
+def parse_pw_dump(text: str) -> list[AudioNode]:
+    """Audio sources and sinks from `pw-dump` JSON. Raises ValueError if it isn't pw-dump output."""
+    data = json.loads(text)
+    if not isinstance(data, list):
+        raise ValueError("pw-dump output is not a list")
+    nodes: list[AudioNode] = []
+    for obj in data:
+        if not isinstance(obj, dict) or obj.get("type") != "PipeWire:Interface:Node":
+            continue
+        info = obj.get("info")
+        props = info.get("props") if isinstance(info, dict) else None
+        if not isinstance(props, dict):
+            continue
+        name, media_class = props.get("node.name"), props.get("media.class")
+        if not isinstance(name, str) or media_class not in ("Audio/Source", "Audio/Sink"):
+            continue
+        description = props.get("node.description")
+        nodes.append(AudioNode(name, media_class, description if isinstance(description, str) else ""))
     return nodes
-
-
-def find_digirig_audio() -> DigirigAudio:
-    return pick_digirig_audio(list_audio_nodes())
