@@ -210,7 +210,9 @@ class Station(GObject.Object):
         if mode is None or self.radio.frequency <= 0:
             return TxCheck(False, "Waiting for the radio.")
         power = self.radio.power_set
-        if power is not None and power > self.settings.max_power_w + 0.05:
+        if power is None:
+            return TxCheck(False, "Waiting for the radio's power setting.")
+        if power > self.settings.max_power_w + 0.05:
             return TxCheck(False, f"The KX3 is set to {power:g} W, above your {self.settings.max_power_w:g} W "
                                   "limit. Lower it with the Power control first.")
         if self.radio.split or self.radio.xit_on:

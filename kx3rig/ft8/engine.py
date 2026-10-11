@@ -42,6 +42,7 @@ OUTPUT_LATENCY_S = 0.04   # PipeWire stream start-up (measured ~10 ms), compensa
 MAX_LATE_S = 3.0
 SIGNAL_WIDTH_HZ = 50
 TUNE_SECONDS = 10.0
+REFUSAL_LIMIT = 10        # ticks (100 ms each) of refused key-down before a contact stops
 QSO_PROGRESS = {          # jt9 -Q: which a-priori decoding types to try
     Stage.CALLING_CQ: 0, Stage.ANSWERING: 1, Stage.REPORT: 2,
     Stage.ROGER_REPORT: 3, Stage.ROGERS: 4, Stage.SIGNOFF: 5,
@@ -80,6 +81,7 @@ class Ft8Engine(GObject.Object):
         self._wave_cache: dict[tuple[str, int], np.ndarray] = {}
         self._timer = 0
         self._decode_lock = threading.Lock()
+        self._refusals = 0
 
     # --- lifecycle --------------------------------------------------------------------
 
@@ -123,7 +125,9 @@ class Ft8Engine(GObject.Object):
         if self.station.radio.mode is not Mode.DATA:
             return bandplan.TxCheck(False, "Switch the radio to DATA mode to transmit FT8.")
         sub = self.station.radio.data_submode
-        if sub is not None and sub is not DataSubmode.DATA_A:
+        if sub is None:
+            return bandplan.TxCheck(False, "Waiting for the radio's data submode.")
+        if sub is not DataSubmode.DATA_A:
             # Other submodes change sideband and audio handling (KX3 Owner's Manual p.18).
             return bandplan.TxCheck(False, "Set the KX3's data submode to DATA A. Tune Radio to FT8 does this.")
         return self.station.can_transmit(Mode.DATA, self.tx_offset, self.tx_offset + SIGNAL_WIDTH_HZ)
@@ -208,6 +212,9 @@ class Ft8Engine(GObject.Object):
     # --- the tick ------------------------------------------------------------------------------
 
     def _tick(self) -> bool:
+        if self.sequencer.active and not self.station.connected:
+            self.halt()
+            self.emit("event", "blocked", "Contact stopped: the radio disconnected.")
         now = time.time()
         slot = slot_of(now)
         t_in = now - slot_start(slot)
@@ -305,9 +312,15 @@ class Ft8Engine(GObject.Object):
         result = self.station.play_data(samples, TX_RATE, on_done=lambda ok, s=seq, t=text: self._tx_done(s, t, ok),
                                         limit_s=PERIOD)
         if not result.allowed:
-            self.halt()
-            self.emit("event", "blocked", result.reason)
+            # Usually transient (a tune still settling): retry on the next ticks,
+            # and give up only if it keeps refusing for about a second.
+            self._tx_slots.discard(slot)
+            self._refusals += 1
+            if self._refusals >= REFUSAL_LIMIT:
+                self.halt()
+                self.emit("event", "blocked", result.reason)
             return
+        self._refusals = 0
         if self.demo:
             from .. import ft8 as pkg
             pkg.demo_last_tx, pkg.demo_last_tx_slot = text, slot

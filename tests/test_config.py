@@ -60,8 +60,16 @@ def test_bools_huge_numbers_and_corrupt_files(tmp_path):
     path.write_text('{"max_power_w": true, "voice_gain": 1e999999}')
     s = config.load(str(path))
     assert s.max_power_w == 10.0 and s.voice_gain == 1.0
-    path.write_text('{"power_w": 1' + "0" * 400 + '}')
+    path.write_text('{"power_w": 1' + "0" * 400 + ', "callsign": "N0CALL"}')
+    s = config.load(str(path))
+    assert s.power_w == 5.0 and s.callsign == "N0CALL"   # only the bad field resets
+    path.write_text("[" * 100_000 + "]" * 100_000)
     assert config.load(str(path)) == config.Settings()
     path.write_text("{oops")
     config.load(str(path))
     assert (tmp_path / "settings.json.bad").read_text() == "{oops"
+
+
+def test_max_power_is_whole_watts():
+    s = config.from_dict({"max_power_w": 7.6, "power_w": 7.6})
+    assert s.max_power_w == 7.0 and s.power_w == 7.0

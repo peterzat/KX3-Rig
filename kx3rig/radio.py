@@ -245,16 +245,17 @@ class RadioLink:
         ser = self._ser
         if on and (ser is None or self._state.link is not Link.CONNECTED):
             return False
-        if on and expect_frequency is not None and self._state.frequency != expect_frequency:
-            return False
-        if on and expect_mode is not None and self._state.mode is not expect_mode:
-            return False
         if on:
             # The license check ran against the optimistic frequency and mode, so
-            # never key while a tuning change is still queued or being applied:
-            # the radio would transmit on its previous frequency.
+            # never key while a tuning change is still queued or being applied
+            # (the radio would transmit on its previous frequency), and then only
+            # if the live state matches what the check saw.
             with self._pending_lock:
                 if self._tuning_pending_locked():
+                    return False
+                if expect_frequency is not None and self._state.frequency != expect_frequency:
+                    return False
+                if expect_mode is not None and self._state.mode is not expect_mode:
                     return False
                 self._pending = _Pending(power=self._pending.power)
         with self._rts_lock:

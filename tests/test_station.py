@@ -210,3 +210,50 @@ def test_ft8_waits_while_tuning(station, monkeypatch, tmp_path):
         assert True not in station._fake.rts_history[keyed:]
     finally:
         gate.set()
+
+
+@pytest.fixture
+def engine(station, monkeypatch, tmp_path):
+    import kx3rig.ft8.encode
+    from kx3rig.ft8.engine import Ft8Engine
+
+    monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path))
+    monkeypatch.setattr(kx3rig.ft8.encode, "available", lambda: True)
+    eng = Ft8Engine(station, demo=True)
+    assert pump(lambda: station.radio.data_submode is not None and station.radio.power_set is not None)
+    return eng
+
+
+def _cq(slot=101):
+    from kx3rig.ft8.messages import parse
+    from kx3rig.ft8.sequencer import Decode
+
+    return Decode(slot=slot, snr=-7, dt=0.1, freq=1200, text="CQ W1AW FN31", message=parse("CQ W1AW FN31"))
+
+
+def test_contact_stops_when_radio_disconnects(station, engine):
+    events = []
+    engine.connect("event", lambda e, kind, msg: events.append(msg))
+    assert engine.answer(_cq()).allowed and engine.sequencer.active
+    station._fake.powered = False
+    assert pump(lambda: not station.connected, timeout=5)
+    engine._tick()
+    assert not engine.sequencer.active
+    assert any("disconnected" in m for m in events)
+
+
+def test_transient_refusal_retries_before_stopping(station, engine, monkeypatch):
+    from kx3rig.bandplan import TxCheck
+    from kx3rig.ft8 import engine as engine_mod
+
+    assert engine.answer(_cq()).allowed
+    monkeypatch.setattr(station, "play_data", lambda *a, **k: TxCheck(False, "Still tuning."))
+    monkeypatch.setattr(engine, "_wave", lambda text: np.zeros(4800, np.float32))
+    slot_start = engine_mod.slot_start
+    our_slot = 202 if engine.sequencer.tx_even else 203
+    t = slot_start(our_slot) + 0.3
+    for _ in range(engine_mod.REFUSAL_LIMIT - 1):
+        engine._maybe_transmit(t)
+    assert engine.sequencer.active          # still retrying
+    engine._maybe_transmit(t)
+    assert not engine.sequencer.active      # gave up after about a second

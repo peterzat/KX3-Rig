@@ -68,19 +68,29 @@ class Settings:
             self.license_class = "Technician"
         for name in ("power_w", "max_power_w", "listen_volume", "voice_gain", "data_tx_level"):
             value = getattr(self, name)
-            if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value):
+            if not _finite_number(value):
                 setattr(self, name, defaults[name].default)
-        offset = self.ft8_tx_offset_hz
-        if isinstance(offset, bool) or not isinstance(offset, (int, float)) or not math.isfinite(offset):
+        if not _finite_number(self.ft8_tx_offset_hz):
             self.ft8_tx_offset_hz = defaults["ft8_tx_offset_hz"].default
         self.callsign = self.callsign.strip().upper()
         self.grid = self.grid.strip()
-        self.max_power_w = min(max(self.max_power_w, 0.1), 15.0)
+        # Whole watts: the radio's basic PC command sets whole watts, so a fractional
+        # ceiling could never be met exactly.
+        self.max_power_w = float(min(max(math.floor(self.max_power_w), 1), 15))
         self.power_w = min(max(self.power_w, 0.1), self.max_power_w)
         self.listen_volume = min(max(self.listen_volume, 0.0), 1.0)
         self.voice_gain = min(max(self.voice_gain, 0.0), 2.0)
         self.data_tx_level = min(max(self.data_tx_level, 0.0), 1.0)
         self.ft8_tx_offset_hz = int(min(max(self.ft8_tx_offset_hz, 200), 3000))
+
+
+def _finite_number(value) -> bool:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return False
+    try:
+        return math.isfinite(value)
+    except OverflowError:   # an int too large for a float
+        return False
 
 
 def from_dict(raw: dict) -> Settings:
@@ -100,7 +110,7 @@ def load(path: str | None = None) -> Settings:
         return from_dict(raw)
     except FileNotFoundError:
         return Settings()
-    except (OSError, ValueError, TypeError, AttributeError, OverflowError):
+    except (OSError, ValueError, TypeError, AttributeError, OverflowError, RecursionError):
         # A corrupt file should never stop the app from starting. Keep a copy so
         # saving defaults on exit does not silently discard hand edits.
         try:
