@@ -34,7 +34,8 @@ It is built for one station today: an Elecraft KX3 connected to an Ubuntu laptop
 - [WSJT-X](https://wsjt.sourceforge.io/wsjtx.html) installed, for FT8 (tested with 3.0.2; KX3-Rig uses
   its `jt9` decoder and `ft8code` encoder)
 - An Elecraft KX3 with its `RS232` menu set to **38400**, a Digirig Mobile (RS-232 build) and
-  the Digirig Elecraft KX cable set
+  the Digirig Elecraft KX cable set. Plugs go in the KX3's left-side jacks: red in **MIC**, green
+  in **PHONES**, black (serial) in **ACC1**; the Connect Your Radio page shows the same guide
 - Your account in the `dialout` group, and ModemManager masked (it grabs USB serial ports):
 
   ```bash
@@ -61,9 +62,9 @@ including stations that answer you.
 
 1. **Connect.** Plug the Digirig into any USB port and turn on the KX3 (hold BAND− and
    ATU TUNE for about 2 seconds). Open KX3-Rig. It finds the Digirig and the radio by itself
-   and shows a checklist until everything answers.
+   and shows a checklist until everything answers, with a guide to which plug goes in which jack.
 
-   ![Waiting for the radio](docs/screenshots/connect.png)
+   ![Waiting for the radio, with the cable guide](docs/screenshots/connect.png)
 
 2. **Tune.** Pick a band, pick a mode, and tune. Turn up the volume at the bottom left to hear
    the radio. The **Radio audio** meter at the bottom right should sit in the green; if it

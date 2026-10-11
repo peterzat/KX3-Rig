@@ -76,6 +76,18 @@ button.talk.on-air { background-color: @error_bg_color; color: @error_fg_color; 
 /* Connect page checklist */
 .checklist row { min-height: 56px; }
 
+/* Connect page cable guide: Digirig KX cable plug colors (libadwaita palette red 3, green 4, dark 4) */
+.plug-dot {
+  min-width: 14px;
+  min-height: 14px;
+  border-radius: 9999px;
+  box-shadow: inset 0 0 0 1px alpha(currentColor, 0.25);
+}
+.plug-dot.red { background-color: #e01b24; }
+.plug-dot.green { background-color: #2ec27e; }
+.plug-dot.black { background-color: #241f31; box-shadow: inset 0 0 0 1px alpha(currentColor, 0.5); }
+.tag.jack { font-weight: 700; }
+
 /* Cycle progress */
 progressbar.cycle trough, progressbar.cycle progress { min-height: 4px; border-radius: 9999px; }
 progressbar.cycle.tx progress { background-color: @error_bg_color; }

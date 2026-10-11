@@ -65,6 +65,18 @@ Source keys:
   `Serial(port)` keys the radio. KX3-Rig builds the port unopened, clears RTS/DTR, then opens.
   **UNVERIFIED**: whether the cp210x driver pulses RTS during open; test into a dummy load.
 
+## Cabling (ui/connect_page.py)
+
+- Digirig Elecraft KX cable set (https://digirig.net/product/elecraft-kx-cables/): an audio cable
+  from the Digirig's audio socket, split into a **red** plug (TX audio and PTT) for the KX3
+  **MIC** jack and a **green** plug (RX audio) for **PHONES**; and a **black** serial cable from
+  the Digirig's serial socket to **ACC1** (RS-232 CAT). The set needs a Digirig Mobile rev 1.6+
+  configured for RS-232.
+- KX3 left-side top row, left to right: `9-15 VDC` power barrel, **ACC1**, KEY, PHONES, MIC
+  (OM p.9). ACC1 is the first 3.5 mm jack beside the power barrel; KEY sits next to it and is
+  easy to mistake for it. Bottom row: ACC2, RX I/Q.
+- Both points were confirmed on this station's KX3 during the earlier bring-up.
+
 ## Receive and transmit audio (audio.py, controller.py)
 
 - Plugging into PHONES disables the internal speaker and its amplifier (OM p.5), so the operator
