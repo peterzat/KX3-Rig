@@ -247,7 +247,7 @@ def test_transient_refusal_retries_before_stopping(station, engine, monkeypatch)
     from kx3rig.ft8 import engine as engine_mod
 
     assert engine.answer(_cq()).allowed
-    monkeypatch.setattr(station, "play_data", lambda *a, **k: TxCheck(False, "Still tuning."))
+    monkeypatch.setattr(station, "play_data", lambda *a, **k: TxCheck(False, "Still tuning.", retry=True))
     monkeypatch.setattr(engine, "_wave", lambda text: np.zeros(4800, np.float32))
     slot_start = engine_mod.slot_start
     our_slot = 202 if engine.sequencer.tx_even else 203
@@ -257,3 +257,99 @@ def test_transient_refusal_retries_before_stopping(station, engine, monkeypatch)
     assert engine.sequencer.active          # still retrying
     engine._maybe_transmit(t)
     assert not engine.sequencer.active      # gave up after about a second
+
+
+def _refuse_all(station, engine, monkeypatch, retry=True):
+    from kx3rig.bandplan import TxCheck
+
+    monkeypatch.setattr(station, "play_data", lambda *a, **k: TxCheck(False, "Still tuning.", retry=retry))
+    monkeypatch.setattr(engine, "_wave", lambda text: np.zeros(4800, np.float32))
+
+
+def test_refusal_count_does_not_carry_to_the_next_contact(station, engine, monkeypatch):
+    from kx3rig.ft8 import engine as engine_mod
+
+    _refuse_all(station, engine, monkeypatch)
+    for _ in range(2):                       # two contacts on one engine
+        assert engine.answer(_cq()).allowed
+        t = engine_mod.slot_start(202 if engine.sequencer.tx_even else 203) + 0.3
+        for _ in range(engine_mod.REFUSAL_LIMIT - 1):
+            engine._maybe_transmit(t)
+        assert engine.sequencer.active      # each contact gets its full retry budget
+        engine._maybe_transmit(t)
+        assert not engine.sequencer.active
+
+
+def test_refusal_count_does_not_carry_to_the_next_slot(station, engine, monkeypatch):
+    from kx3rig.ft8 import engine as engine_mod
+
+    _refuse_all(station, engine, monkeypatch)
+    assert engine.answer(_cq()).allowed
+    first = 202 if engine.sequencer.tx_even else 203
+    for slot in (first, first + 2):
+        t = engine_mod.slot_start(slot) + 0.3
+        for _ in range(engine_mod.REFUSAL_LIMIT - 1):
+            engine._maybe_transmit(t)
+        assert engine.sequencer.active
+    engine._maybe_transmit(t)
+    assert not engine.sequencer.active
+
+
+def test_non_transient_refusal_stops_at_once(station, engine, monkeypatch):
+    from kx3rig.ft8 import engine as engine_mod
+
+    events = []
+    engine.connect("event", lambda e, kind, msg: events.append(kind))
+    _refuse_all(station, engine, monkeypatch, retry=False)
+    assert engine.answer(_cq()).allowed
+    engine._maybe_transmit(engine_mod.slot_start(202 if engine.sequencer.tx_even else 203) + 0.3)
+    assert not engine.sequencer.active and events == ["blocked"]
+
+
+def test_audio_failure_is_not_retried(station, monkeypatch):
+    import types
+
+    import kx3rig.audio
+
+    class Broken:
+        def __init__(self, *a, **k):
+            pass
+
+        def start(self):
+            raise RuntimeError("no sink")
+
+    monkeypatch.setattr(kx3rig.audio, "DataTransmit", Broken)
+    monkeypatch.setattr(station, "demo", False)          # take the real DataTransmit path
+    monkeypatch.setattr(station, "_digirig_audio", types.SimpleNamespace(sink=types.SimpleNamespace(name="x")))
+    check = station.play_data(np.zeros(4_800, np.float32), 48_000)
+    assert not check.allowed and not check.retry and "Could not play" in check.reason
+    assert not station.data_transmitting
+
+
+def test_tuning_refusal_is_retryable(station):
+    gate, blocked = gate_writes(station._fake)
+    try:
+        assert blocked.wait(2)
+        station.tune_to(14_230_000)
+        check = station.play_data(np.zeros(4_800, np.float32), 48_000)
+        assert not check.allowed and check.retry
+    finally:
+        gate.set()
+
+
+def test_unknown_power_refuses_transmit(station, engine):
+    import dataclasses
+
+    assert station.can_transmit(Mode.DATA, 1500, 1550).allowed
+    station.radio = dataclasses.replace(station.radio, power_set=None)
+    check = station.can_transmit(Mode.DATA, 1500, 1550)
+    assert not check.allowed and "power" in check.reason
+
+
+def test_unknown_submode_refuses_ft8(station, engine):
+    import dataclasses
+
+    assert engine.check_tx().allowed
+    station.radio = dataclasses.replace(station.radio, data_submode=None)
+    check = engine.check_tx()
+    assert not check.allowed and "submode" in check.reason

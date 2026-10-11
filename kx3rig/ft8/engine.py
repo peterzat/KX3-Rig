@@ -82,6 +82,7 @@ class Ft8Engine(GObject.Object):
         self._timer = 0
         self._decode_lock = threading.Lock()
         self._refusals = 0
+        self._refusal_slot: int | None = None
 
     # --- lifecycle --------------------------------------------------------------------
 
@@ -137,6 +138,7 @@ class Ft8Engine(GObject.Object):
         if not check.allowed:
             return check
         self.sequencer = Sequencer(self.settings.callsign, self.settings.grid4)
+        self._refusals = 0
         if not self.sequencer.answer(decode):
             return bandplan.TxCheck(False, "That message doesn't name a station to answer.")
         self._pick_clear_offset()
@@ -148,6 +150,7 @@ class Ft8Engine(GObject.Object):
         if not check.allowed:
             return check
         self.sequencer = Sequencer(self.settings.callsign, self.settings.grid4)
+        self._refusals = 0
         now = time.time()
         upcoming = slot_of(now) + (1 if now - slot_start(slot_of(now)) > MAX_LATE_S else 0)
         self.sequencer.call_cq(tx_even=upcoming % 2 == 0)
@@ -157,6 +160,7 @@ class Ft8Engine(GObject.Object):
 
     def halt(self) -> None:
         was_busy = self.busy
+        self._refusals = 0
         self.sequencer.halt()
         self.tuning = False
         self.station.stop_data_tx()
@@ -312,9 +316,16 @@ class Ft8Engine(GObject.Object):
         result = self.station.play_data(samples, TX_RATE, on_done=lambda ok, s=seq, t=text: self._tx_done(s, t, ok),
                                         limit_s=PERIOD)
         if not result.allowed:
-            # Usually transient (a tune still settling): retry on the next ticks,
+            if not result.retry:
+                # Not transient (for example the audio failed after keying): stop now.
+                self.halt()
+                self.emit("event", "blocked", result.reason)
+                return
+            # Refused before keying (a tune still settling): retry on the next ticks,
             # and give up only if it keeps refusing for about a second.
             self._tx_slots.discard(slot)
+            if self._refusal_slot != slot:
+                self._refusal_slot, self._refusals = slot, 0   # count per transmit slot
             self._refusals += 1
             if self._refusals >= REFUSAL_LIMIT:
                 self.halt()

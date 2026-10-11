@@ -174,6 +174,7 @@ def occupied(dial: int, mode: Mode, audio_low: int | None = None, audio_high: in
 class TxCheck:
     allowed: bool
     reason: str = ""
+    retry: bool = False   # refused before keying, likely transient: the caller may try again
 
 
 def _mhz(hz: int) -> str:

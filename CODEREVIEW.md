@@ -1,95 +1,77 @@
-## Review — 2026-10-10 (commit: c3b5699)
+## Review — 2026-10-10 (commit: 266a725)
 
-**Summary:** Full review of c3b5699 ("Close key-down windows and harden settings"), the one commit ahead of `origin/main` (13 files). The fixes for the prior NOTEs mostly work. The stale main-loop key-down window is now refused, verified on the emulator for both a tune and a band change. A generic link error now ends the data transmission in flight, verified with `on_done(False)` and RTS off. The review found 4 WARNs, and one /codefix cycle fixed all 4. The fixes are uncommitted in kx3rig/radio.py, kx3rig/ui/ft8_page.py, and tests/test_station.py. Tests: 205 passed (baseline 201, plus 4 new); without the WSJT-X tools on PATH, 198 passed and 7 skipped.
+**Summary:** Refresh review of 266a725 ("Finish transmit-path hardening from review notes"), the one commit ahead of `origin/main` (6 files). The prior review covered c3b5699, and its fixes (b8090c9) are already pushed. Most of the commit works. The `ptt` ordering gap is closed (verified by /security on the emulator), unknown power and submode now refuse, a contact stops on disconnect, and settings are now repaired per field. The new FT8 retry had two defects, and the new refusals had no tests. These 3 WARNs were fixed in one /codefix cycle; the fixes are uncommitted in kx3rig/bandplan.py, kx3rig/controller.py, kx3rig/ft8/engine.py, and tests/test_station.py. Tests: 215 passed (baseline 208, plus 7 new).
 
 **External reviewers:**
 None configured.
 
 **Built-in review:**
-`/code-review high`: 10 findings, 10 kept after Step 6 (merged into 3 WARNs and 5 NOTEs).
+`/code-review high`: 9 findings, 9 kept after Step 6 (merged into 3 WARNs and 5 NOTEs).
 
 ### Findings
 
-[NOTE] kx3rig/radio.py:248-259, 407-412, 504-508, kx3rig/controller.py:216-218 — Key-down windows are only partly closed, and the commit title overstates this.
-  Closed and verified: a tune or band change the link applied before the main-loop copy updates is now refused.
-  Still open, each reproduced by /security:
+[NOTE] kx3rig/radio.py:248-259, 407-412, 504-508, kx3rig/controller.py:218-220 — Key-down windows. The ordering gap in `ptt` is closed. /security paused the call for 2 s, and a queued change to 40 m or to USB was refused; a control call with nothing queued still keyed. Three windows remain, each reproduced by /security:
   - SPLIT and XIT are read from the main-loop copy, and `ptt` does not compare them.
-  - A `?;` reply to a frequency SET leaves the optimistic frequency in the link state. `_get` also returns the `?;` as the answer and drops the real FA reply.
-  - `_handshake` publishes CONNECTED before it reads IF, so the pre-outage frequency is approved on reconnect.
-  - Ordering gap in `ptt`: the frequency and mode comparisons (lines 248-251) run before, and outside, the `_pending_lock` block that checks for a pending tune (lines 256-259). /security reproduced it with a forced 2 s pause between the two: a queued change to 40 m keyed on 7.185 MHz LSB after the check approved 14.074 MHz DATA. FT8 and Tune cannot reach it, because `play_data` checks for a pending tune just before calling `ptt`. Voice (`start_talking`) can, but only if the main thread stalls for several serial round trips at that exact point.
-  Fix for the ordering gap: move the comparisons inside the lock, after the pending check. All of these are low likelihood in normal use. (/security) (also claude-code)
+  - A `?;` reply to a frequency SET leaves the optimistic frequency in the link state. In 5 of 5 runs the radio keyed on 14.230 MHz after the check approved 14.074 MHz.
+  - `_handshake` publishes CONNECTED before it reads IF, DT, and PC. An active FT8 contact now stops on disconnect, so FT8 is mostly no longer exposed. Tune and Talk still are, for one round trip. `_drop_port` also keeps `power_set` and `data_submode`, so the new unknown-value refusals do not apply after a reconnect. A power level raised on the front panel during an outage passes until PC is read. (claude-code)
+  All are low likelihood in normal use. (/security) (also claude-code)
 
-[NOTE] kx3rig/ft8/engine.py:125-128, kx3rig/controller.py:212-213, kx3rig/radio.py:543 — Both new checks pass when the value is unknown: the submode check allows `data_submode is None`, and the power check allows `power_set is None`. DT is polled only every fifth cycle in data modes, so a change to AFSK A on the front panel is seen late. /security keyed at once after such a change; the link saw it 0.61 s later. If the submode check is made to refuse an unknown submode, ui/ft8_page.py:392-393 must show the setup button for that case too, or the hidden-button problem returns. (/security)
+[NOTE] kx3rig/radio.py:543-547, kx3rig/ft8/engine.py:128-133 — An unknown submode or power now refuses transmit (resolved, and tested). A stale known value still passes. DT and PC are polled every fifth cycle, so a front-panel change to AFSK A, or a power increase above the maximum, is seen about a second late. /security keyed at once after a change to AFSK A, and the link saw the change 0.61 s later. (/security)
 
-[NOTE] kx3rig/controller.py:261-263, 321-325, kx3rig/ft8/engine.py:281, 305-309, kx3rig/radio.py:248-259 — `ptt` returns only a bool, so each caller repeats the pending-tune check to pick a message: the engine, `play_data` before `ptt`, and `start_talking` after it. When the new frequency or mode comparison refuses, the reason shown is "The radio did not accept push-to-talk." This happens, for example, when the operator nudges the VFO just before a slot. FT8 then halts the contact as "blocked" instead of retrying on the next tick. Returning a reason from `ptt` would give one accurate message on every path. (also claude-code)
+[NOTE] kx3rig/config.py:77-79 — The whole-watt clamp also raises the floor from 0.1 W to 1 W. A hand-edited ceiling below 1 W, such as 0.5, is raised to 1 W on load, and a safety ceiling should not go up silently. The Preferences row offers only 1 to 15 W, so only a hand-edited file reaches this. Consider refusing transmit for a ceiling below 1 W, or keeping the value and flooring the requests. (also claude-code)
 
-[NOTE] kx3rig/ft8/engine.py:281-282, kx3rig/radio.py:341-353 — If the link drops while a tune is still pending, `tuning_pending` stays true for the whole outage. `_drop_port` does not clear `_pending`, and `_service` does not run while disconnected. The tick returns before `check_tx`, so an active contact is neither halted nor told "The radio isn't connected", as it was before this commit. It resumes after reconnect, once the queued change is applied. This needs a drop within the brief pending window. Checking `self.station.connected` before `tuning_pending` in the tick closes it. (claude-code)
+[NOTE] kx3rig/radio.py:277-286 — `_update` calls `on_state` after it releases `_state_lock`. When the main thread (`set_frequency`, `ptt`) and the worker update at the same time, an older snapshot can be queued to the main loop after a newer one. The main-loop copy then holds the older snapshot until the next change. /security forced this with a pause. It fails closed, because the `ptt` comparison then refuses. Calling `on_state` (an `idle_add`) while holding the lock keeps the order. (/security)
 
-[NOTE] kx3rig/config.py:73-75, 93-110 — One oversized integer resets every setting, including callsign, grid, and license class. The OverflowError is caught in `load()`, not per field in `clamp()`. The `.bad` copy keeps the data, but the file itself is still overwritten with defaults on exit; the commit message says the file is "kept... instead of being overwritten". /security also found that deeply nested JSON raises RecursionError, which `load()` does not catch, so the app fails to start. All of these need a hand-edited file. (/security) (also claude-code)
+[NOTE] kx3rig/controller.py:260-265 — Voice still reports a frequency or mode mismatch as "The radio did not accept push-to-talk." FT8 now uses the new `TxCheck.retry` flag. `start_talking` could use the same distinction to show an accurate message. (carried, reduced) (also claude-code)
 
-[NOTE] kx3rig/cat.py:137-140, kx3rig/controller.py:212-215, kx3rig/ui/radio_page.py:121-122, 317-320 — The new power check interacts badly with how the app sets power.
-  - `cat.set_power` rounds to whole watts. `clamp()` allows a fractional maximum from 0.1 W, and the Preferences SpinRow holds 2.6 when given 2.6. With such a maximum the app requests more than the ceiling (2.6 W sends PC003), and the check then blocks transmit for good.
-  - A maximum below 1 W cannot be met, because the Power scale starts at 1.
-  - When the radio is above the limit, the scale shows the clamped limit, so choosing that value sends nothing. The operator must move off it and back.
-  - The scale range is fixed at startup (carried).
-  Fix: round the request down to the ceiling, or keep `max_power_w` a whole number. (claude-code)
+[NOTE] kx3rig/ft8/engine.py:309-315 — Each refused retry rebuilds the full transmit buffer, about 0.6 M float32 samples, on the main thread, up to 10 times per slot. The cost is small: a few MB copied per second while refusals continue. (claude-code)
 
-[NOTE] kx3rig/ft8/engine.py:126 — The comment cites "KX3 Owner's Manual p.18" for "Other submodes change sideband and audio handling". docs/references.md:79-80 records only DATA A's behavior from that page, and the prior scan found the references do not cover the other submodes. CLAUDE.md asks for hardware claims to come from a source read in the session. Record the fact in references.md, or soften the comment. The check itself is conservative either way.
+[NOTE] Commit 266a725 bundles four concerns: the `ptt` check order, the unknown-value refusals, the FT8 retry and disconnect stop, and settings. It follows the review-batch convention, and its message lists every item, so this is not a BLOCK.
 
-[NOTE] install.sh:27-28, constraints.txt:5-8 — Supply-chain pinning is partial.
-  - numpy and pyserial are pinned.
-  - `pip install --upgrade pip` is not pinned.
-  - pip's `-c` constraints do not apply to the isolated build environment, so the newest setuptools is always fetched. /security confirmed this in pip 26.2.1's source.
-  - No documented command applies the pytest, pluggy, iniconfig, and packaging pins. install.sh installs only the project, and README.md:119 does not say how pytest gets into the venv.
-  - There are no hashes.
-  (/security) (also claude-code)
+[NOTE] SECURITY.md records one personal-data NOTE without its location. Read it there, and do not copy its location into committed files. (/security)
 
-[NOTE] kx3rig/ft8/grid.py:14 — `g[2:4].isdigit()` followed by `int()` is the same pattern this commit fixed in cat.py. Only a hand-edited grid in settings.json could hold a superscript digit, because jt9 decodes use the ASCII FT8 alphabet. Low.
+[NOTE] kx3rig/ui/radio_page.py:121-122, 317-320 — Power control residuals. When the radio is above the limit, the scale shows the clamped limit, so choosing that value sends nothing. The scale range is also fixed at startup. The fractional-ceiling part of the prior NOTE is resolved. (carried)
 
-[NOTE] Commit c3b5699 bundles nine unrelated review fixes: key-down, link error, parsers, power check, DATA A, settings, pins, screenshot path, and the live-test doc. It follows the review-batch convention and its message lists every item, so this is not a BLOCK.
+[NOTE] kx3rig/ft8/engine.py:132 — The comment cites "KX3 Owner's Manual p.18" for the behavior of the other submodes, which docs/references.md does not record. (carried)
+
+[NOTE] install.sh:27-28, constraints.txt:5-8 — Supply-chain pinning is partial. pip and the setuptools build backend are not pinned, no documented command installs the pinned test tools, and there are no hashes. (/security, carried)
+
+[NOTE] kx3rig/ft8/grid.py:14 — `isdigit()` followed by `int()` is the pattern fixed in cat.py. Only a hand-edited grid reaches it. (carried)
 
 [NOTE] kx3rig/controller.py:298-314, 356-363 — `_abort_data_tx` cannot tell which transmission an idle-queued link event belongs to. No reachable race was found. (carried, low confidence)
 
-[NOTE] kx3rig/radio.py:259, 557-566, kx3rig/controller.py:83, 356-363 — Code quality:
+[NOTE] kx3rig/radio.py:232-234, 558-566, kx3rig/config.py:69-74, kx3rig/controller.py:83, 356-363 — Code quality:
   - The `_Pending(power=...)` reset in `ptt(True)` can only discard a queued bandwidth change.
   - The tuning-field list exists twice (`_apply_pending`, `_tuning_pending_locked`).
-  - `_abort_data_tx` repeats `failed()`.
-  - `_data_tx_finish` moves in lockstep with `_data_tx_token`.
+  - `ft8_tx_offset_hz` has its own copy of the finite-number check. Adding it to the loop's tuple would do the same job. (claude-code)
+  - `_abort_data_tx` repeats `failed()`, and `_data_tx_finish` moves in lockstep with `_data_tx_token`.
   (carried)
 
-[NOTE] kx3rig/bandplan.py:186, 212 — `tx_check` and `privilege_segments` still default `license_class` to "General". No current caller omits it. (/security, carried)
+[NOTE] kx3rig/bandplan.py:187, 213 — `tx_check` and `privilege_segments` still default `license_class` to "General". No current caller omits it. (/security, carried)
 
-[NOTE] README.md:72, docs/references.md:6, 22-24 — README says the first-transmit dialog reminds you to retune a magnetic loop, but the dialog now reminds every operator to tune the antenna. references.md cites station-verified facts to private notes that readers cannot open. (carried; the live-test.md Extra-class item is resolved)
+[NOTE] README.md:72, docs/references.md:6, 22-24 — README's description of the first-transmit dialog is out of date, and references.md cites private notes that readers cannot open. (carried)
 
-[NOTE] kx3rig/radio.py:547-548 — After a transmission only `power_out` is cleared, so the previous `swr` shows briefly at the start of the next one. (carried)
+[NOTE] kx3rig/radio.py:548-549 — After a transmission only `power_out` is cleared, so the previous `swr` shows briefly at the start of the next one. (carried)
 
 [NOTE] install.sh:31 — `Exec=` is substituted unquoted, and a repo path containing `|` breaks the sed expression. (carried)
 
 [NOTE] kx3rig/ft8/sequencer.py:90-105 — Answering a decode addressed to us that carries only "73" reports success but leaves the sequencer idle. (carried)
 
-[NOTE] docs/references.md:139-140 — "Starts up to 3 s late" counts from the period boundary; the most waveform skipped is about 2.5 s. (carried, low confidence)
+[NOTE] docs/references.md:139-140 — "Starts up to 3 s late" counts from the period boundary. The most waveform skipped is about 2.5 s. (carried, low confidence)
 
 Resolved since the prior review:
-- The generic link-error path now ends the data transmission (verified on the emulator).
-- CAT parsers accept ASCII digits only.
-- Settings files: JSON booleans no longer pass the numeric checks, oversized numbers no longer crash startup, and a corrupt file is copied to `settings.json.bad`.
-- FT8 and Tune refuse any data submode other than DATA A.
-- The stale main-loop key-down window is refused (verified for a tune and a band change).
-- Key-down is refused when the radio's power is above the maximum.
-- The screenshot recipe no longer uses `/tmp/shots`; it uses `mktemp -d`, and screenshots.py prints each path.
-- The live-test step for Extra licensees is fixed.
+- The `ptt` ordering gap (window 4): the comparisons now run under `_pending_lock`, after the pending-tune check. Verified by /security.
+- An unknown power setting or data submode now refuses transmit.
+- A link drop while a tune is pending no longer leaves a contact waiting: an active contact stops when the radio disconnects.
+- An oversized integer resets only its own field, and deeply nested JSON no longer stops startup.
+- The maximum power is whole watts on load. The Preferences row accepts only whole numbers: typing 2.6 produced 1.0 in a GTK check.
+- FT8 retries a transient key-down refusal instead of stopping the contact.
 
 ### Fixes Applied
 
-- [WARN] tests/test_station.py:108-121 — `test_ft8_requires_data_a` failed without WSJT-X and wrote to the real data directory. It now sets `XDG_DATA_HOME` to `tmp_path` and stubs `encode.available`. Verified: 198 passed and 7 skipped with `PATH=.venv/bin`; it was 1 failed before the fix.
-- [WARN] kx3rig/ui/ft8_page.py:392-393 — The "Tune Radio to FT8" button was hidden in the state where the DATA A refusal tells the operator to press it. It now also shows when the data submode is known and is not DATA A, the same condition the engine refuses on. (also claude-code)
-- [WARN] kx3rig/radio.py:305-315 — The link retried with no delay after an exception, flooding the main loop with "lost" events. Both `except` branches now wait `RETRY_INTERVAL`. /security measured one event per 1.5 s, down from about 43,000 per second. (/security) (also claude-code)
-- [WARN] tests/test_station.py:124-212 — The new transmit-safety paths had no tests. Four emulator tests now cover them:
-  - a link error ends the data transmission;
-  - a stale main-loop copy never keys after a tune;
-  - `play_data` is refused while a tune is pending;
-  - FT8 waits while a tune is pending.
-  /codefix confirmed the first two fail when their fix is removed. (also claude-code)
+- [WARN] kx3rig/ft8/engine.py:85, 141, 153, 163, 326-329 — The refusal counter carried across contacts and slots. After one give-up, every later contact stopped on its first transient refusal (emulator probe: counter 11 on the new contact). `_refusals` now resets in `halt()`, `answer()`, and `call_cq()`, and again when a new transmit slot starts (`_refusal_slot`). Re-probed: a new contact stays active after one refusal. (also claude-code) (also /security)
+- [WARN] kx3rig/bandplan.py:177, kx3rig/controller.py:324-327, kx3rig/ft8/engine.py:318-323 — The retry also repeated a key-down when transmit audio failed after PTT was raised (emulator probe: 10 RTS rises in about a second). `TxCheck` has a new `retry` flag. `play_data` sets it only for the pending-tune and `ptt` refusals, where nothing was keyed, and the engine stops at once for any other refusal. Re-probed: one RTS rise, then the contact stops. /security confirmed that a retry re-runs the license check and adds no key-down window. (also claude-code) (also /security)
+- [WARN] tests/test_station.py:262-355 — The unknown-power and unknown-submode refusals had no tests. Seven tests now cover them, plus the retry flag, a non-retryable refusal, and the per-contact and per-slot counter. (also claude-code)
 
 ### Accepted Risks
 
@@ -97,6 +79,6 @@ Resolved since the prior review:
   copyright line is deliberate open-source attribution.
 
 ---
-*Prior review (2026-10-10): first-push full review of 3f84f8a on the rewritten `main` (empty-tree base). It had no BLOCK or WARN and 16 NOTEs; the most important were the narrow key-down windows, the generic link-error path that left a data transmission running, and settings-file robustness. c3b5699 addresses most of them.*
+*Prior review (2026-10-10): full review of c3b5699, which closed the stale main-loop key-down window and the generic link-error path. It found 4 WARNs (a test that failed without WSJT-X, the hidden Tune Radio to FT8 button, the link retry spin, and untested transmit-safety paths), all fixed by /codefix and pushed as b8090c9, and 18 NOTEs.*
 
-<!-- REVIEW_META: {"date":"2026-10-10","commit":"c3b5699","reviewed_up_to":"c3b56996badc75e772c0d4c0f9e1a651d4b528ac","base":"origin/main","tier":"full","block":0,"warn":0,"note":18} -->
+<!-- REVIEW_META: {"date":"2026-10-10","commit":"266a725","reviewed_up_to":"266a72542d83c7825e187147ad14eb209c76445d","base":"origin/main","tier":"refresh","block":0,"warn":0,"note":20} -->

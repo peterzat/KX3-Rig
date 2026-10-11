@@ -321,10 +321,10 @@ class Station(GObject.Object):
             self._emit_event("error", f"Transmit audio failed: {msg}")
 
         if self.link.tuning_pending:
-            return TxCheck(False, "Still tuning. Try again in a moment.")
+            return TxCheck(False, "Still tuning. Try again in a moment.", retry=True)
         if not self.link.ptt(True, limit_s=limit_s, expect_frequency=self.radio.frequency,
                              expect_mode=self.radio.mode):
-            return TxCheck(False, "The radio did not accept push-to-talk.")
+            return TxCheck(False, "The radio did not accept push-to-talk.", retry=True)
         self._data_tx_token = token
         self._data_tx_finish = finish
         if self.demo:
