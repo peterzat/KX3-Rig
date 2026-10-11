@@ -218,12 +218,10 @@ class JackPanel(Gtk.Widget):
     """The KX3's left-side jack row with the Digirig plugs drawn in place."""
 
     __gtype_name__ = "KX3JackPanel"
-    HEIGHT = 96
     PANEL_TOP, PANEL_H = 22, 44
 
     def __init__(self):
         super().__init__(accessible_role=Gtk.AccessibleRole.IMG, css_classes=["caption"])
-        self.set_size_request(-1, self.HEIGHT)
         for side in ("top", "bottom", "start", "end"):
             getattr(self, f"set_margin_{side}")(12)
         self.update_property(
@@ -231,6 +229,27 @@ class JackPanel(Gtk.Widget):
             ["KX3 left side: black plug in ACC1, KEY empty, green plug in PHONES, red plug in MIC"],
         )
         Adw.StyleManager.get_default().connect("notify::dark", lambda *_: self.queue_draw())
+
+    def do_get_request_mode(self) -> Gtk.SizeRequestMode:
+        return Gtk.SizeRequestMode.HEIGHT_FOR_WIDTH
+
+    def do_measure(self, orientation, for_size):
+        """Tall enough for the labels at the current font size, wrapped to their slots."""
+        if orientation == Gtk.Orientation.HORIZONTAL:
+            return 0, 0, -1, -1
+        h = int(self._labels(None, for_size) + 0.999)
+        return h, h, -1, -1
+
+    def _labels(self, snap, w, ink=None) -> float:
+        """Draw (or, with no snapshot, measure) the labels under each jack; returns their bottom."""
+        layout = self.create_pango_layout("")
+        slot = w / len(JACK_ROW) if w > 0 else -1
+        bottom = 0.0
+        for i, (jack, plug, note) in enumerate(JACK_ROW):
+            cx, y = slot * (i + 0.5), self.PANEL_TOP + self.PANEL_H + 6
+            y = _text(snap, layout, jack, cx, y, slot, ink and ink(1.0 if plug else 0.55), bold=bool(plug))
+            bottom = max(bottom, _text(snap, layout, note, cx, y, slot, ink and ink(0.55)))
+        return bottom
 
     def do_snapshot(self, snap: Gtk.Snapshot) -> None:
         w = self.get_width()
@@ -256,7 +275,6 @@ class JackPanel(Gtk.Widget):
         snap.pop()
         snap.append_border(panel, [1] * 4, [ink(0.18)] * 4)
 
-        layout = self.create_pango_layout("")
         for i, (jack, plug, note) in enumerate(JACK_ROW):
             cx = slot * (i + 0.5)
             if plug:
@@ -281,10 +299,7 @@ class JackPanel(Gtk.Widget):
             else:
                 snap.append_stroke(_circle(cx, cy, 9), Gsk.Stroke.new(1.5), ink(0.5))
                 snap.append_fill(_circle(cx, cy, 3.5), Gsk.FillRule.WINDING, ink(0.6))
-
-            y = top + ph + 6
-            y = _text(snap, layout, jack, cx, y, ink(1.0 if plug else 0.55), bold=bool(plug))
-            _text(snap, layout, note, cx, y, ink(0.55))
+        self._labels(snap, w, ink)
 
 
 def _circle(cx: float, cy: float, r: float) -> Gsk.Path:
@@ -295,17 +310,24 @@ def _circle(cx: float, cy: float, r: float) -> Gsk.Path:
     return builder.to_path()
 
 
-def _text(snap, layout, text, cx, y, color, bold=False) -> float:
-    """Draw text centered on cx with its top at y; returns the y below it."""
+def _text(snap, layout, text, cx, y, width, color, bold=False) -> float:
+    """Draw text centered on cx, wrapped to width, with its top at y; returns the y below it.
+
+    With snap None the text is only measured."""
     attrs = Pango.AttrList()
     if bold:
         attrs.insert(Pango.attr_weight_new(Pango.Weight.BOLD))
     layout.set_attributes(attrs)
+    layout.set_width(int(width * Pango.SCALE) if width > 0 else -1)
+    layout.set_wrap(Pango.WrapMode.WORD_CHAR)
+    layout.set_alignment(Pango.Alignment.CENTER)
     layout.set_text(text, -1)
     tw, th = layout.get_pixel_size()
+    if snap is None:
+        return y + th
     snap.save()
     point = Graphene.Point()
-    point.x, point.y = cx - tw / 2, y
+    point.x, point.y = cx - (width if width > 0 else tw) / 2, y
     snap.translate(point)
     snap.append_layout(layout, color)
     snap.restore()
