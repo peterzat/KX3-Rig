@@ -69,7 +69,7 @@ including stations that answer you.
    the radio. The **Radio audio** meter at the bottom right should sit in the green; if it
    doesn't, adjust the KX3's AF gain knob.
 3. **Talk.** In LSB, USB, AM, or FM, hold **Hold to Talk** and speak. The first time on a
-   band, KX3-Rig asks you to confirm and reminds you to retune the AlexLoop. Set the KX3's mic
+   band, KX3-Rig asks you to confirm and reminds you to retune a magnetic loop antenna. Set the KX3's mic
    gain so its ALC shows about 5 bars while you speak.
 4. **FT8.** Open the **FT8** view and press **Tune Radio to FT8** (or choose a band). After a
    cycle or two, decodes appear. Double-click a CQ to answer it, or press **Call CQ**. The app

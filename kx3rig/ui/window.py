@@ -250,7 +250,8 @@ class MainWindow(Adw.ApplicationWindow):
         dialog = Adw.AlertDialog(
             heading=f"Transmit on {band.label if band else 'this band'}?",
             body=(f"KX3-Rig will transmit at {power} on {st.frequency / 1e6:.3f} MHz.\n\n"
-                  "Retune the AlexLoop for the loudest receive noise on this frequency first. "
+                  "If you use a magnetic loop such as the AlexLoop, retune it for the loudest "
+                  "receive noise on this frequency first. "
                   "You can stop at any time with Stop or the Esc key."),
         )
         dialog.add_response("cancel", "_Cancel")
