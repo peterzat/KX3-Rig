@@ -1,64 +1,52 @@
-## Review — 2026-10-10 (commit: 26f3355)
+## Review — 2026-10-10 (commit: 3f84f8a)
 
-**Summary:** First-push full review of the whole tree on the rewritten `main` (empty-tree base, 65 files, 8 commits). Two fix cycles were applied (uncommitted): key-down is refused while a tune is in flight, a link-initiated PTT drop now ends the FT8 engine's transmission, and transmit is refused while SPLIT or XIT is on. Tests: 191 passed at baseline, 194 passed after fixes.
+**Summary:** First-push full review of the whole tree on the again-rewritten `main` (empty-tree base, 9 commits). The rewrite only removed the private-repo links from three commits; the final tree is identical to the one reviewed last time plus 3f84f8a (the second round of review fixes, settings hardening, and docs/live-test.md). No BLOCK or WARN findings; no fixes applied. Tests: 196 passed.
 
 **External reviewers:**
 None configured.
 
 **Built-in review:**
-`/code-review high`: 8 findings, 6 kept after Step 6 (merged into 4 NOTEs; 1 dropped as unconfirmed, 1 as style).
+`/code-review high`: 10 findings, 10 kept after Step 6 (merged into 6 NOTEs).
 
 ### Findings
 
-[WARN] kx3rig/radio.py:234-238 — Discarding a pending tune at key-down transmitted on a frequency the license check never saw. FIXED.
-  Evidence: `set_frequency` updates `RadioState.frequency` optimistically and `Station.can_transmit` checks that value, but `ptt(True)` dropped the pending `FA`, so the radio keyed on its previous frequency while the display showed the checked one. Reproduced with FakeKX3 (checked 14.230 MHz, transmitted on 14.200 MHz USB, outside General phone). Introduced by 75eb844.
-  Fix: `ptt(True)` refuses while a band, frequency, or mode change is queued or being applied, and keeps the change. The discard test was replaced by `test_never_keys_on_a_frequency_other_than_the_one_checked`.
+[NOTE] kx3rig/radio.py:245-252, 493-494, 546-554, kx3rig/controller.py:104, 201-215 — Narrow key-down windows remain. The license check reads the main-loop copy `Station.radio` (idle priority) while the PTT gate reads the link's live `_tuning` flag, so once a tune or band change (which has no optimistic update) is applied, the gate opens before the check sees the new frequency. `_tuning` also clears when the readback is `?;` or times out, leaving the optimistic frequency in state. SPLIT/XIT changes made on the radio are seen only at the next IF poll, and `_handshake` reports CONNECTED before reading IF. /security reproduced the first window again (checked 14.074 MHz, keyed on 14.230 MHz DATA). Low likelihood in normal use. A sturdier design has `ptt(True)` confirm frequency, mode, SPLIT, and XIT against the checked values from a fresh readback. (/security) (also claude-code)
 
-[WARN] kx3rig/controller.py:150-155, 327-333 — When the link dropped PTT on its own (time-limit watchdog, or no TQ reply while keyed), the FT8 engine was never told, so it stayed "transmitting" and refused Tune until the operator pressed Stop. A lost serial port also let the data clip play out and counted it as sent. FIXED.
-  Evidence: `stop_data_tx()` cleared the completion token, so `on_done` never ran. Reproduced in demo mode (Tune stuck after a "watchdog" event). Introduced by 75eb844.
-  Fix: on a "watchdog" or "lost" event the data transmission in flight ends and its `on_done(False)` runs once (`_abort_data_tx`). Operator halts stay silent. Test `test_watchdog_ends_data_transmission_and_reports_it_once` added.
+[NOTE] kx3rig/radio.py:302-304, kx3rig/cat.py:284-288, 316-324 — The link's generic `except Exception` path drops the port and PTT without emitting "lost" or "watchdog", so `_abort_data_tx` never runs: the data clip keeps playing unkeyed and `on_done(True)` reports it as sent, which can credit or log an FT8 message that was cut off. Reproduced on the emulator (RuntimeError in `read`: PTT dropped, no event, `on_done` reported `[True]`). One concrete trigger: `parse_if` and `parse_om` guard with `str.isdigit()`, which accepts latin-1 superscript digits (0xB2, 0xB3, 0xB9), and then `int()` raises ValueError (verified). In receive this only causes a spurious reconnect; during transmit only TQ/PO/SW are parsed (regex, safe), so the transmit case needs a code bug. Suggested fix: emit "lost" from the generic handler, and use `isascii() and isdigit()` (or try/except) in the two parsers. (also claude-code)
 
-[WARN] kx3rig/controller.py:201-215 — The license check ignored SPLIT and XIT, so an approved key-down could transmit on VFO B or at the XIT offset, outside the operator's privileges. (/security post-fix re-check; pre-existing) FIXED.
-  Evidence: `RadioState.split` and `xit_on` were stored from every IF poll and never read; only VFO A reached `bandplan.tx_check`.
-  Fix: `can_transmit` refuses with "Turn off SPLIT and XIT on the KX3 to transmit." The emulator reports both flags at the documented IF offsets. Test `test_split_or_xit_blocks_transmit` added. Not confirmed on the radio itself.
+[NOTE] kx3rig/controller.py:316-317, kx3rig/ft8/engine.py:486-491 — When FT8 or Tune key-down is refused because a tune is still in flight, the reason is "The radio did not accept push-to-talk." and an active contact is halted as "blocked". Voice now says "Still tuning". Checking `link.tuning_pending` in `can_transmit` would give one message on every path, and the engine could retry within MAX_LATE_S rather than halt. (also claude-code)
 
-[WARN] Local branch `pre-scrub` (7fe3a5f) — It still holds the unscrubbed history: the station callsign in four test files, the 6-character grid, and the original FT8 screenshots. (/security) OPEN: REQUIRES HUMAN DECISION.
-  Evidence: `main` is clean (no commit on `main` contains either value, in file contents or commit messages). `git push -u origin main` would not send `pre-scrub`, but `git push --all`, `--mirror`, or `git push origin pre-scrub` would publish it to the public repository.
-  Suggested fix: push with `git push -u origin main`. If a backup is wanted, `git bundle create ~/kx3-rig-pre-scrub.bundle pre-scrub`, then `git branch -D pre-scrub`.
+[NOTE] kx3rig/controller.py:201-215, kx3rig/bandplan.py:166-170 — The license check ignores the data submode and treats DATA as upper sideband, which docs/references.md:79 confirms only for DATA A. In AFSK A, FSK D, or PSK D (set from the front panel) the occupied span may differ. Refusing data transmit unless `data_submode` is DATA A closes it. Low confidence in the on-air effect. (/security)
 
-[NOTE] kx3rig/radio.py:245-252, 493-494, 546-554, kx3rig/controller.py:104, 201-215 — Narrow key-down windows remain: the license check reads the main-loop copy `Station.radio` (idle priority), so a default-priority FT8 tick can check a stale frequency just after a tune was applied; a `?;` or missing frequency readback clears the in-progress flag while the state still shows the optimistic frequency; a SPLIT or XIT change made on the radio is seen only at the next IF poll; and after a reconnect `_handshake` reports CONNECTED before reading IF, so the pre-outage frequency and flags are briefly approved. All reproduced against the emulator; low likelihood in normal use. A sturdier design has the link confirm frequency, mode, SPLIT, and XIT against the checked values just before asserting RTS, and announces CONNECTED with the first IF reply. (/security)
+[NOTE] kx3rig/controller.py:298-314, 348-355 — `_abort_data_tx` cannot tell which transmission an idle-queued link event belongs to. No reachable race was found: both the EOS completion and the link event go through `GLib.idle_add` in arrival order, and clip lengths (FT8 about 12.9 s, Tune 10 s) are below their limits (15 s, 11 s). Low confidence. (claude-code)
 
-[NOTE] kx3rig/controller.py:247-249, 306-307 — When key-down is refused because a tune is still in flight, the operator sees "The radio did not accept push-to-talk." and an active FT8 contact is halted as "blocked". A "Waiting for the radio" reason would be clearer.
+[NOTE] kx3rig/radio.py:249-252, 549, kx3rig/controller.py:83, 309-314, 348-355 — Code quality after the fixes: the `_Pending(power=...)` reset in `ptt(True)` can now only discard a queued bandwidth change, and its comment history suggests tuning is still dropped; the tuning-field list exists twice (`_apply_pending` and `_tuning_pending_locked`, which differ by `data_submode`); `_abort_data_tx` repeats `failed()`; `_data_tx_finish` is set and cleared in lockstep with `_data_tx_token`. (claude-code)
 
-[NOTE] Commits 77cd569 and 75eb844 each bundle many unrelated fixes (about ten and seven). They follow this workflow's review-batch convention and their messages list every item, so this is not a BLOCK. Split them only if per-fix bisecting matters; nothing is pushed yet.
+[NOTE] kx3rig/config.py:68-73, 101-103, kx3rig/controller.py:136 — JSON booleans pass the numeric checks (`"max_power_w": true` loads as 1 W and is saved back as `true`). An integer literal over about 308 digits makes `math.isfinite` raise OverflowError, which `load()` does not catch, so the app fails to start. Invalid JSON still yields defaults that `Station.shutdown()` saves over the operator's file. All need a hand-edited file. (/security) (also claude-code)
 
-[NOTE] Repository history — Links to the private KX3-Digirig-Ubuntu GitHub repository remain in 166f505, 77cd569, and 75eb844 (README.md:11, docs/references.md:7). 26f3355 removes them from HEAD only. If the goal was only to avoid dead links, nothing is needed. If the repository's GitHub location should stay unpublished, fold 26f3355 into the earlier commits before the first push. The repository name stays at HEAD in CLAUDE.md:7 and docs/references.md:6 either way. (claude-code)
+[NOTE] kx3rig/ui/preferences.py:71-74, kx3rig/ui/radio_page.py:121-133, kx3rig/controller.py:201-215 — The maximum power is a ceiling on requests only. Key-down is allowed when the radio's own PC setting is above it, lowering it in Preferences does not lower the radio's current power, and the power slider keeps the range from startup. README.md:96-97 words this accurately ("never asks for more"); config.py:37 calls it a "hard ceiling".
 
-[NOTE] docs/references.md:6, 22-24 — Facts marked station-verified now cite private notes that readers cannot open, while line 4 says the linked source wins on any conflict. Copy the verified facts in, or mark them as verified on this station with a date. (claude-code)
+[NOTE] kx3rig/bandplan.py:186, 212 — `tx_check` and `privilege_segments` still default `license_class` to "General"; only the unknown-class fallback became Technician. No current caller omits the argument. (/security)
 
-[NOTE] kx3rig/ui/window.py:253-255, README.md:72 — The generalized first-transmit reminder now addresses only magnetic-loop users, so operators with other antennas get no tune or SWR reminder, though the docstring says "antenna tuned". README.md:72 states the reminder unconditionally. A neutral line ("Check that your antenna is tuned for this frequency; for a magnetic loop, ...") covers both. The AlexLoop is still named as the reason for the 10 W default in README.md:95, ui/preferences.py:68, and config.py:37. (claude-code)
+[NOTE] Commits 85bb20a, f5c2437, and 3f84f8a each bundle several unrelated fixes. They follow the review-batch convention and their messages list every item, so this is not a BLOCK. After the rewrite, 9003c0b ("Drop links to a private repo; generalize the antenna reminder") no longer drops any links; those removals now live in 04ead39, 85bb20a, and f5c2437. Reword it if the history should read accurately; nothing is pushed yet.
 
-[NOTE] docs/screenshots/confirm.png — It shows the old dialog text ("Retune the AlexLoop ..."). Neither README.md nor the metainfo references it, and screenshots.py:93 writes `confirm-light.png`, so it will not be regenerated. Regenerate or remove it. (claude-code)
+[NOTE] README.md:72, docs/references.md:6, 22-24, docs/live-test.md:183 — README still says the first-transmit dialog reminds you to retune a magnetic loop; the dialog now reminds every operator to tune the antenna. references.md cites station-verified facts to private notes readers cannot open (carried). live-test.md expects Hold to Talk on 14.200 MHz to be disabled, which holds for General and Technician only; an Extra licensee would key on that step (into the dummy load).
 
-[NOTE] kx3rig/controller.py:99-100 — `"serial_port": null` in a hand-edited settings.json passes `config.load()` (`clamp()` never touches it) and crashes `Station.__init__` at `settings.serial_port.strip()` (verified). Separately, any one bad field makes `load()` return all defaults, and `Station.shutdown()` then saves those defaults over the operator's file.
+[NOTE] kx3rig/radio.py:536-537 — After a transmission only `power_out` is cleared; the previous `swr` shows briefly at the start of the next one. (carried)
 
-[NOTE] kx3rig/bandplan.py:186, 200, 212-214 — `tx_check` and `privilege_segments` still default to, and fall back to, General for an unknown class. `Settings.clamp()` makes this unreachable today, but it should match the new most-restrictive default (Technician).
+[NOTE] install.sh:31 — `Exec=` is substituted unquoted, and a repo path containing `|` breaks the sed expression. (carried)
 
-[NOTE] kx3rig/radio.py:536-537 — After a transmission only `power_out` is cleared; the previous `swr` shows briefly at the start of the next one. (carried from prior review)
+[NOTE] kx3rig/ft8/sequencer.py:90-105 — Answering a decode addressed to us that carries only "73" reports success but leaves the sequencer idle. (carried)
 
-[NOTE] install.sh:31 — `Exec=` is substituted unquoted, and a repo path containing `|` breaks the sed expression. (carried from prior review)
+[NOTE] docs/references.md:139-140 — "Starts up to 3 s late" counts from the period boundary; the most waveform skipped is about 2.5 s. (carried, low confidence)
 
-[NOTE] kx3rig/ft8/sequencer.py:90-105 — Answering a decode addressed to us that carries only "73" reports success but leaves the sequencer idle. (carried from prior review)
+[NOTE] /security NOTEs (see SECURITY.md): dependencies with lower bounds only and no lock file; the shared `/tmp/shots` path in CLAUDE.md:47; the author's name as attribution (accepted below, but SECURITY.md's Accepted Risks does not list it yet).
 
-[NOTE] docs/references.md:139-140 — "Starts up to 3 s late" counts from the period boundary; the most waveform skipped is about 2.5 s. (carried from prior review, low confidence)
-
-[NOTE] /security NOTEs (see SECURITY.md): the author's full name as attribution in pyproject.toml, the About dialog, and the metainfo (deliberate; add to Accepted Risks if so); dependencies with lower bounds only and no lock file; the shared `/tmp/shots` path in CLAUDE.md:47.
+Resolved since the prior review: the `pre-scrub` branch WARN (the branch is gone and `main` is the only ref; the old commits survive only in the local reflog, which `git push` never sends), the private-repo links in history (rewritten out; only the repository name remains in CLAUDE.md:7 and docs/references.md:6), the stale docs/screenshots/confirm.png (regenerated with the new dialog text and now shown in the README), and the `"serial_port": null` startup crash.
 
 ### Fixes Applied
 
-- [WARN] kx3rig/radio.py: `ptt(True)` refuses while a band, frequency, or mode change is queued or being applied; the change is kept. New `tuning_pending` property. tests/test_radio.py: the discard test was replaced with `test_never_keys_on_a_frequency_other_than_the_one_checked`.
-- [WARN] kx3rig/controller.py: on a "watchdog" or "lost" link event, the data transmission in flight ends and its `on_done(False)` runs once (`_abort_data_tx`); operator halts stay silent. Test `test_watchdog_ends_data_transmission_and_reports_it_once` added.
-- [WARN] kx3rig/controller.py, kx3rig/fakeradio.py: `can_transmit` refuses while SPLIT or XIT is on; the emulator reports both flags in its IF reply. Test `test_split_or_xit_blocks_transmit` added.
+None.
 
 ### Accepted Risks
 
@@ -66,6 +54,6 @@ None configured.
   copyright line is deliberate open-source attribution.
 
 ---
-*Prior review (2026-10-10): first-push review of the pre-scrub history (commit 2c3aebc); 1 BLOCK and 9 WARNs fixed, the personal-data-in-history WARN left for the operator's decision (now resolved on `main` by the history rewrite), and 15 NOTEs, most of which 75eb844 addressed.*
+*Prior review (2026-10-10): first-push review of 26f3355; two fix cycles (later committed as 3f84f8a) refused key-down while a tune is in flight, ended the FT8 transmission on a link-initiated PTT drop, and refused transmit under SPLIT or XIT; the `pre-scrub` branch WARN was left for the operator and is now resolved.*
 
-<!-- REVIEW_META: {"date":"2026-10-10","commit":"26f3355","reviewed_up_to":"26f33558b5ab0f05cc85dc1555e775d29e7a08ec","base":"4b825dc642cb6eb9a060e54bf8d69288fbee4904","tier":"full","block":0,"warn":1,"note":16} -->
+<!-- REVIEW_META: {"date":"2026-10-10","commit":"3f84f8a","reviewed_up_to":"3f84f8a1a2d2c2fd8a2743f7ea73e8a3f55f0d34","base":"4b825dc642cb6eb9a060e54bf8d69288fbee4904","tier":"full","block":0,"warn":0,"note":16} -->
