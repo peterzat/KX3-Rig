@@ -108,7 +108,7 @@ connection, receive, FT8 decoding, and then transmit into a dummy load, in that 
 | Symptom | What to check |
 |---------|---------------|
 | "Connect Your Radio" never finds the Digirig | Is the USB cable seated? `ls /dev/serial/by-id/` should list a `CP2102N` device |
-| "Turn On the KX3" while the radio is on | The KX3 `RS232` menu must be 38400. The black cable goes in **ACC1** (next to the power jack), not KEY |
+| "Turn On the KX3" while the radio is on | Push every plug all the way in (a half-seated plug looks exactly like this). The black plug goes in **ACC1** (next to the power jack), not KEY. The KX3 `RS232` menu must be 38400 |
 | "Permission Needed" | Add yourself to `dialout` (see Requirements) and log out and back in |
 | "Radio in Use" | Another program (often WSJT-X) has the port. Quit it; KX3-Rig connects by itself |
 | No FT8 decodes | Is the radio on an FT8 frequency in DATA mode? Is the Radio audio meter green? Is the clock synchronized (`timedatectl`)? |

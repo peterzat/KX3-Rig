@@ -93,6 +93,10 @@ Source keys:
 - SSB voice: set CMP to 0, raise mic gain until ALC reaches about the 5th bar, then add
   compression to taste; set power with PWR, never with mic gain (OM p.15; firmware 1.50 notes).
   AM and FM use the same path. FM deviation defaults to 5.0 kHz (OM p.38).
+- Digirig discovery runs `pw-dump` in a separate process. An in-process GStreamer
+  `DeviceMonitor` (PipeWire 1.0.5 provider) deadlocks on its second start once a `pipewiresrc` in
+  the same process is streaming from the Digirig; that froze the window on first contact with the
+  radio (2026-10-11).
 - The KX3 blocks transmit outside ham bands ("BND END", OM p.44) but knows nothing about license
   classes, so KX3-Rig enforces sub-band privileges itself.
 - Power: 10 W PEP 160-15 m, 8 W 12-6 m (OM p.54); PWR adjusts in 0.1 W steps to 1 W and 0.2 W
@@ -156,10 +160,23 @@ phone segments too (97.305(a)).
 - Clock: the User Guide asks for UTC within ±1 s. This machine runs systemd-timesyncd and was
   synchronized (offset about -70 ms) on 2026-10-10.
 
+## Verified on this station's KX3 (2026-10-11, receive only)
+
+- Replies at 38400 8N2 with RTS/DTR held low: `ID017;`, `OM A-F----BX-02;` (product 02 = KX3;
+  ATU and roofing filter fitted), `RVM02.38;`, `K20;`, `AI0;`, and a well-formed 38-byte `IF`.
+- Firmware MCU 2.38 is below the 2.93 that `SW;` needs, so KX3-Rig shows no SWR readout during
+  transmit (it only polls `SW;` on 2.93+). A firmware update would enable it.
+- KX3-Rig connected, followed the radio (7.245850 MHz, DATA), and ran receive audio and the
+  waterfall from the Digirig for 30 s with no main-loop stalls.
+- A plug that is not fully seated gives exactly the "radio isn't answering" symptom: the port
+  opens and the radio sends nothing. The bring-up preflight (`check-digirig.py`) failed the same
+  way until the plug was reseated.
+
 ## Open items to verify on the radio
 
-1. Read `RVM;` for the firmware version (`SW;` SWR needs 2.93+).
-2. Confirm `K2;`, `K3;`, `AI;` as WSJT-X left them, and that KX3-Rig restores them on exit.
+1. Firmware version: verified above (2.38, so no SWR readout).
+2. Confirm `K2;`, `K3;`, `AI;` as WSJT-X left them, and that KX3-Rig restores them on exit
+   (before WSJT-X ran today the radio reported `K20;` and `AI0;`).
 3. The AG (AF gain) range: the PR says 0-255; Hamlib says 0-60 in practice. KX3-Rig does not set
    AG.
 4. Whether connecting pulses RTS (watch the KX3's TX indicator while KX3-Rig connects, into a

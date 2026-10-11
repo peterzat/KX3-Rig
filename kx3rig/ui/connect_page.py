@@ -180,8 +180,8 @@ class ConnectPage(Gtk.Box):
             self.audio.set("spin", "Looking for the Digirig sound card…")
 
         if st.link is Link.NO_REPLY:
-            self.help.set_label("Already on? Check that the KX3's RS232 menu is set to 38400 and the "
-                                "black plug is in ACC1, not KEY.")
+            self.help.set_label("Already on? Push every plug all the way in, check that the black plug "
+                                "is in ACC1 (not KEY), and that the KX3's RS232 menu is set to 38400.")
         elif st.link is Link.NO_INTERFACE:
             self.help.set_label("The Digirig shows up as a USB serial port and a USB sound card. "
                                 "Any USB port works.")
