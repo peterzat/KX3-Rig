@@ -18,7 +18,7 @@ gi.require_version("Adw", "1")
 from gi.repository import Adw, GLib, Gtk, Pango  # noqa: E402
 
 from .. import bandplan  # noqa: E402
-from ..cat import Mode  # noqa: E402
+from ..cat import DataSubmode, Mode  # noqa: E402
 from ..ft8 import grid as grids  # noqa: E402
 from ..ft8.decode import PERIOD, slot_of, slot_start  # noqa: E402
 from ..ft8.engine import Ft8Engine  # noqa: E402
@@ -389,7 +389,8 @@ class Ft8Page(Gtk.Box):
         st = self.station.radio
         on_ft8 = self.engine.on_ft8_frequency()
         connected = st.link is Link.CONNECTED
-        self.setup_button.set_visible(connected and on_ft8 is None)
+        wrong_sub = st.data_submode is not None and st.data_submode is not DataSubmode.DATA_A
+        self.setup_button.set_visible(connected and (on_ft8 is None or wrong_sub))
         self.band_dd.set_sensitive(connected)
         if on_ft8 is not None:
             self._syncing = True

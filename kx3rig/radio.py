@@ -306,11 +306,13 @@ class RadioLink:
                     log.info("serial link lost: %s", exc)
                     self._drop_port()
                     self._on_event("lost", "Lost contact with the Digirig.")
+                    self._sleep(RETRY_INTERVAL)
                 except Exception:
                     log.exception("link error")
                     self._drop_port()
                     # Tell the station so any transmission in flight ends cleanly.
                     self._on_event("lost", "The radio link hit an error and was reset.")
+                    self._sleep(RETRY_INTERVAL)
         finally:
             self._shutdown()
 
