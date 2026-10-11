@@ -88,3 +88,8 @@ def test_occupied_spans():
 def test_privilege_segments_for_band():
     segs = bandplan.privilege_segments(BY_NAME["20m"], "General")
     assert [(s.low, s.high) for s in segs] == [(14_025_000, 14_150_000), (14_225_000, 14_350_000)]
+
+
+def test_unknown_license_class_is_most_restrictive():
+    assert not tx_check(14_074_000, Mode.DATA, "Wizard", 1500, 1550).allowed
+    assert tx_check(28_074_000, Mode.DATA, "Wizard", 1500, 1550).allowed

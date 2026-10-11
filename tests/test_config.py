@@ -46,3 +46,10 @@ def test_non_finite_numbers_fall_back(tmp_path):
     path.write_text('{"max_power_w": NaN, "power_w": "lots", "ft8_tx_offset_hz": Infinity}')
     s = config.load(str(path))
     assert s.max_power_w == 10.0 and s.power_w == 5.0 and s.ft8_tx_offset_hz == 1500
+
+
+def test_null_and_wrong_types_fall_back(tmp_path):
+    path = tmp_path / "settings.json"
+    path.write_text('{"serial_port": null, "callsign": 7, "listen": "yes", "grid": null}')
+    s = config.load(str(path))
+    assert (s.serial_port, s.callsign, s.listen, s.grid) == ("", "", True, "")

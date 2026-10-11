@@ -77,3 +77,22 @@ def test_stopped_transmission_never_reports_or_unkeys_later(station):
     pump(lambda: False, timeout=0.8)
     assert station.radio.ptt and done == []
     assert pump(lambda: done == [True], timeout=3)
+
+
+def test_watchdog_ends_data_transmission_and_reports_it_once(station):
+    done = []
+    tone = np.zeros(96_000, np.float32)   # 2 s, longer than the 0.3 s limit
+    assert station.play_data(tone, 48_000, on_done=done.append, limit_s=0.3).allowed
+    assert pump(lambda: done == [False], timeout=2)
+    assert not station.data_transmitting and not station.radio.ptt
+    pump(lambda: False, timeout=2.2)       # the clip's own completion is stale now
+    assert done == [False]
+
+
+@pytest.mark.parametrize("flag", ["split", "xit_on"])
+def test_split_or_xit_blocks_transmit(station, flag):
+    assert station.can_transmit(Mode.DATA, 1500, 1550).allowed
+    setattr(station._fake, flag, True)
+    assert pump(lambda: getattr(station.radio, flag))
+    check = station.can_transmit(Mode.DATA, 1500, 1550)
+    assert not check.allowed and "SPLIT" in check.reason

@@ -197,7 +197,7 @@ def tx_check(
     if mode is Mode.FM and dial < FM_MIN_HZ:
         return TxCheck(False, "FM transmit is only allowed from 29.0 MHz up (10 m FM and 6 m).")
     low, high = occupied(dial, mode, audio_low, audio_high)
-    segments = PRIVILEGES.get(license_class, GENERAL)
+    segments = PRIVILEGES.get(license_class, TECHNICIAN)  # unknown class: most restrictive
     for seg in segments:
         if kind in seg.kinds and seg.low <= low and high <= seg.high:
             return TxCheck(True)
@@ -211,7 +211,7 @@ def tx_check(
 
 def privilege_segments(band: Band, license_class: str = "General") -> list[Segment]:
     """Segments inside a band, for drawing the band overview."""
-    return [s for s in PRIVILEGES.get(license_class, GENERAL) if band.low <= s.low < band.high]
+    return [s for s in PRIVILEGES.get(license_class, TECHNICIAN) if band.low <= s.low < band.high]
 
 
 # Tuning step presets per mode (Hz): (fine, coarse). SSB stations align on

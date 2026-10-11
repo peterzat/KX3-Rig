@@ -55,10 +55,16 @@ class Settings:
         return self.grid[:4].upper()
 
     def clamp(self) -> None:
+        defaults = Settings.__dataclass_fields__
+        # Hand-edited files can hold nulls, NaN, or the wrong types; those fall back.
+        for name in ("callsign", "grid", "license_class", "serial_port"):
+            if not isinstance(getattr(self, name), str):
+                setattr(self, name, defaults[name].default)
+        for name in ("listen",):
+            if not isinstance(getattr(self, name), bool):
+                setattr(self, name, defaults[name].default)
         if self.license_class not in LICENSE_CLASSES:
             self.license_class = "Technician"
-        # Hand-edited files can hold NaN or strings; anything non-finite falls back.
-        defaults = Settings.__dataclass_fields__
         for name in ("power_w", "max_power_w", "listen_volume", "voice_gain", "data_tx_level"):
             value = getattr(self, name)
             if not isinstance(value, (int, float)) or not math.isfinite(value):

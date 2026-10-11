@@ -1,5 +1,6 @@
 """Drive the real RadioLink against the KX3 emulator."""
 
+import threading
 import time
 
 import pytest
@@ -217,13 +218,43 @@ def test_ptt_dropped_when_radio_stops_answering():
         assert "watchdog" in h.events
 
 
-def test_tuning_queued_before_keydown_is_discarded():
-    fake = FakeKX3()
+class GatedKX3(FakeKX3):
+    """Emulator that can hold the link thread inside a write, and records the
+    frequency the radio is on each time RTS keys it."""
+
+    def __init__(self, **kw):
+        super().__init__(**kw)
+        self.gate = threading.Event()
+        self.gate.set()
+        self.blocked = threading.Event()
+        self.keyed_on: list[int] = []
+
+    def write(self, data: bytes) -> int:
+        if not self.gate.is_set():
+            self.blocked.set()
+            self.gate.wait(5)
+        return super().write(data)
+
+    @FakeKX3.rts.setter
+    def rts(self, value: bool) -> None:
+        if value:
+            self.keyed_on.append(self.frequency)
+        FakeKX3.rts.fset(self, value)
+
+
+def test_never_keys_on_a_frequency_other_than_the_one_checked():
+    fake = GatedKX3()
     with Harness(fake) as h:
         assert wait_for(lambda: h.link.state.link is Link.CONNECTED)
-        with h.link._pending_lock:
-            h.link._pending.frequency = 14_200_000   # queued, not yet applied
-        h.link.ptt(True, limit_s=5)
-        time.sleep(0.5)
+        fake.gate.clear()
+        assert fake.blocked.wait(2)               # link thread is stuck before applying
+        h.link.set_frequency(14_230_000)
+        checked = h.link.state.frequency           # what a license check would see
+        assert checked == 14_230_000
+        assert h.link.tuning_pending
+        assert not h.link.ptt(True, limit_s=5)    # refused: the radio is still on 14.074
+        fake.gate.set()
+        assert wait_for(lambda: fake.frequency == 14_230_000 and not h.link.tuning_pending)
+        assert h.link.ptt(True, limit_s=5)
         h.link.ptt(False)
-    assert "FA00014200000;" not in fake.received
+    assert fake.keyed_on == [checked]

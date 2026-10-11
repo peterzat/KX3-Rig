@@ -80,6 +80,7 @@ class Station(GObject.Object):
         self._voice = None
         self._data_tx = None
         self._data_tx_token = None
+        self._data_tx_finish = None   # finish(ok) of the transmission in flight
         self._digirig_audio = None
         self._audio_timer = 0
         self._demo_source = None
@@ -150,7 +151,10 @@ class Station(GObject.Object):
     def _emit_event(self, kind: str, message: str) -> bool:
         if kind == "watchdog":
             self.stop_talking()
-            self.stop_data_tx()
+        if kind in ("watchdog", "lost"):
+            # The link dropped PTT on its own: end the data transmission and
+            # tell its owner (FT8 engine) that it did not complete.
+            self._abort_data_tx()
         self.emit("event", kind, message)
         return False
 
@@ -205,6 +209,9 @@ class Station(GObject.Object):
         mode = mode or self.radio.mode
         if mode is None or self.radio.frequency <= 0:
             return TxCheck(False, "Waiting for the radio.")
+        if self.radio.split or self.radio.xit_on:
+            # The license check only sees VFO A; SPLIT or XIT would transmit elsewhere.
+            return TxCheck(False, "Turn off SPLIT and XIT on the KX3 to transmit.")
         return bandplan.tx_check(self.radio.frequency, mode, self.settings.license_class, audio_low, audio_high)
 
     def voice_check(self) -> TxCheck:
@@ -246,6 +253,8 @@ class Station(GObject.Object):
             return TxCheck(False, f"Could not open the microphone: {exc}")
         if not self.link.ptt(True, limit_s=VOICE_TX_LIMIT_S):
             self._stop_voice_stream()
+            if self.link.tuning_pending:
+                return TxCheck(False, "Still tuning. Try again in a moment.")
             return TxCheck(False, "The radio did not accept push-to-talk.")
         self.talking = True
         self.emit("talking-changed", True)
@@ -290,6 +299,7 @@ class Station(GObject.Object):
             if self._data_tx_token is not token:
                 return False   # stopped already, or superseded
             self._data_tx_token = None
+            self._data_tx_finish = None
             self._data_tx = None
             self.link.ptt(False)
             if on_done:
@@ -306,6 +316,7 @@ class Station(GObject.Object):
         if not self.link.ptt(True, limit_s=limit_s):
             return TxCheck(False, "The radio did not accept push-to-talk.")
         self._data_tx_token = token
+        self._data_tx_finish = finish
         if self.demo:
             self._data_tx = object()
             GLib.timeout_add(int(len(samples) / rate * 1000), finish, True)
@@ -320,6 +331,7 @@ class Station(GObject.Object):
         except Exception as exc:
             self._data_tx = None
             self._data_tx_token = None
+            self._data_tx_finish = None
             self.link.ptt(False)
             return TxCheck(False, f"Could not play transmit audio: {exc}")
         return TxCheck(True)
@@ -327,10 +339,20 @@ class Station(GObject.Object):
     def stop_data_tx(self) -> None:
         tx, self._data_tx = self._data_tx, None
         self._data_tx_token = None   # any pending completion is now stale
+        self._data_tx_finish = None
         if tx is not None and hasattr(tx, "stop"):
             tx.stop()
         if tx is not None:
             self.link.ptt(False)
+
+    def _abort_data_tx(self) -> None:
+        """End the data transmission in flight and run its on_done(False) once."""
+        tx, finish = self._data_tx, self._data_tx_finish
+        if finish is None:
+            return
+        finish(False)
+        if tx is not None and hasattr(tx, "stop"):
+            tx.stop()
 
     @property
     def data_transmitting(self) -> bool:

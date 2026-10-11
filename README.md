@@ -82,6 +82,8 @@ including stations that answer you.
 
 ## Safety
 
+![The first transmission on a band asks for confirmation](docs/screenshots/confirm.png)
+
 - KX3-Rig clears RTS and DTR before opening the serial port (RTS keys the Digirig's
   push-to-talk). A brief RTS pulse from the USB serial driver during open has not been ruled
   out yet; verify into a dummy load.
@@ -94,6 +96,11 @@ including stations that answer you.
   receive-only in this version. The power control never asks for more than the maximum in
   Preferences (10 W by default, the AlexLoop's digital limit).
 - FT8 contacts are always started by you. When one finishes, the app stops transmitting.
+
+## First time with the radio
+
+Work through [docs/live-test.md](docs/live-test.md) the first time you connect: it checks the
+connection, receive, FT8 decoding, and then transmit into a dummy load, in that order.
 
 ## Troubleshooting
 

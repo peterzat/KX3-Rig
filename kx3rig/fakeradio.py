@@ -33,6 +33,8 @@ class FakeKX3:
         self.powered = powered
         self.garbled = garbled
         self.cat_tx = False
+        self.split = False
+        self.xit_on = False
         self._rts = False
         self.dtr = False
         self.received: list[str] = []
@@ -104,7 +106,8 @@ class FakeKX3:
     def _if_frame(self) -> str:
         return (
             f"IF{self.frequency:011d}     +0000"
-            f"00 00{1 if self.transmitting else 0}{self.mode.value}0000"
+            f"0{1 if self.xit_on else 0} 00{1 if self.transmitting else 0}{self.mode.value}"
+            f"00{1 if self.split else 0}0"
             f"{self.data_submode if self.k3 else 0}1 ;"
         )
 

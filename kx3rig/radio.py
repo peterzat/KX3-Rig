@@ -162,6 +162,7 @@ class RadioLink:
         self._splitter = cat.FrameSplitter()
         self._pending = _Pending()
         self._pending_lock = threading.Lock()
+        self._tuning = False   # a band/frequency/mode change is being applied
         self._wake = threading.Event()
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
@@ -222,6 +223,16 @@ class RadioLink:
             self._pending.power = watts
         self._wake.set()
 
+    @property
+    def tuning_pending(self) -> bool:
+        """True while a band, frequency, or mode change has not reached the radio."""
+        with self._pending_lock:
+            return self._tuning_pending_locked()
+
+    def _tuning_pending_locked(self) -> bool:
+        p = self._pending
+        return self._tuning or any(v is not None for v in (p.band, p.frequency, p.mode, p.data_submode))
+
     def ptt(self, on: bool, limit_s: float = 120.0) -> bool:
         """Key or unkey the transmitter via the Digirig RTS line.
 
@@ -232,9 +243,12 @@ class RadioLink:
         if on and (ser is None or self._state.link is not Link.CONNECTED):
             return False
         if on:
-            # Tuning queued just before key-down was not covered by the
-            # license check made for this transmission; drop it.
+            # The license check ran against the optimistic frequency and mode, so
+            # never key while a tuning change is still queued or being applied:
+            # the radio would transmit on its previous frequency.
             with self._pending_lock:
+                if self._tuning_pending_locked():
+                    return False
                 self._pending = _Pending(power=self._pending.power)
         with self._rts_lock:
             if ser is not None:
@@ -532,6 +546,14 @@ class RadioLink:
     def _apply_pending(self) -> None:
         with self._pending_lock:
             pending, self._pending = self._pending, _Pending()
+            self._tuning = any(v is not None for v in (pending.band, pending.frequency, pending.mode))
+        try:
+            self._apply_changes(pending)
+        finally:
+            with self._pending_lock:
+                self._tuning = False
+
+    def _apply_changes(self, pending: _Pending) -> None:
         if pending.empty():
             return
         if pending.band is not None:
