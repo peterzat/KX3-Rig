@@ -36,7 +36,7 @@ moment. Automated tests that transmit require a dummy load the operator has conf
   log to `kx3rig-demo-log.adi`, never the real log.
 
 **Visual review.** `--demo --screenshot DIR` renders the window to PNGs: `KX3RIG_SHOTS` picks
-plans from `radio,voice,ft8,qso`; `--demo off` or `--demo unplugged` capture the connect page.
+plans from `radio,voice,ft8,qso,scan`; `--demo off` or `--demo unplugged` capture the connect page.
 `--screenshot` refuses to run without `--demo` (the plans retune and transmit). When the
 desktop is locked or the display is off, GTK draws no frames; run inside a private headless
 compositor instead:
@@ -46,6 +46,15 @@ dbus-run-session -- gnome-shell --headless --no-x11 --sm-disable \
   --virtual-monitor 1280x960 --wayland-display kx3shot &
 WAYLAND_DISPLAY=kx3shot .venv/bin/kx3-rig --demo --screenshot "$(mktemp -d)"
 ```
+
+**Network.** Only Smartscan goes online (PSKReporter at most every 5 minutes, SWPC every 15),
+only while it is on, and never in demo mode. Send nothing beyond the 4-character grid without
+the operator's say-so.
+
+**macOS (convenience only).** The ThinkPad is the target. On the MacBook, Homebrew's GTK stack
+works with a venv made from `/opt/homebrew/bin/python3.14 -m venv --system-site-packages`;
+run the app with `XDG_DATA_DIRS=/opt/homebrew/share`. `--screenshot` there may report "nothing
+rendered yet" for the first capture.
 
 **Tests:** `./run-tests.sh` must pass with no radio attached. The FT8 round-trip tests need the
 WSJT-X tools and are skipped without them. Add or update tests in the same increment as any
@@ -65,5 +74,8 @@ titles and buttons, sentence case for descriptions).
 - `bandplan.py` US privileges and FT8 dials; `config.py` settings (`~/.config/kx3-rig`).
 - `ft8/` messages, sequencer, encode (ft8code + GFSK), decode (jt9 + UTC-aligned recorder),
   engine (period timing, transmit scheduling, logging), adif, grid.
+- `smartscan/` detect (voice/CW/carrier in a dwell), plan (sweep steps, RF mapping, calling
+  frequencies), heard (merged hearings and clips), conditions (PSKReporter, SWPC, sun), engine
+  (the sweep on the main loop). Design and story in docs/smartscan.md.
 - `ui/` window, connect page, radio page, FT8 page, frequency readout, waterfall, meters,
   preferences, style.css.

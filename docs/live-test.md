@@ -1,7 +1,7 @@
 # First live test
 
 KX3-Rig has been tested against a simulated KX3 and on this laptop's audio devices, but not yet on
-the radio. Work through this list the first time the KX3 is attached. Steps 1-2 never transmit.
+the radio. Work through this list the first time the KX3 is attached. Steps 1, 2, and 5 never transmit.
 Steps 3-4 transmit; do them yourself, as control operator, starting with a dummy load. Record
 anything verified in [references.md](references.md) ("Open items to verify on the radio").
 
@@ -48,6 +48,22 @@ anything verified in [references.md](references.md) ("Open items to verify on th
 - Double-click a strong CQ. The contact runs by itself; Stop ends it at any time.
 - When it completes, the contact appears under **Logged Contacts** and in
   `~/.local/share/kx3-rig/kx3rig-log.adi`.
+
+## 5. Smartscan (receive only)
+
+- Radio view, 20 m USB, loop peaked near 14.285. Press **Smartscan**. Within a few seconds the
+  band buttons get dots and a sentence about band conditions appears (needs internet).
+- The KX3 display steps through 14.225-14.350 MHz. Note whether each step clicks or mutes, and
+  the "about N s per sweep" figure (open item 8; the demo gives about 60-85 s).
+- Hold to Talk is disabled while it sweeps, and the FT8 view's Tune is refused.
+- When a station appears in the list, press play: you hear the recorded seconds on the laptop,
+  and the KX3's TX indicator stays dark. Press **Tune**: the voice should be intelligible
+  (within about 100 Hz). Note how far off it is.
+- Compare the band view's noise curve with where the loop is peaked.
+- Turn the KX3's VFO knob mid-sweep: Smartscan stops and leaves the radio there. Start it again
+  and press Esc: the radio returns to where it started.
+- CW: switch to CW on 40 m and start Smartscan. Steps happen in USB. Tune to a CW station and
+  note the pitch you hear it at (it should be your sidetone pitch).
 
 ## After
 

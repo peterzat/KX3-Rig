@@ -12,6 +12,41 @@ It is built for one station today: an Elecraft KX3 connected to an Ubuntu laptop
 
 ![KX3-Rig on 20 meters](docs/screenshots/radio-dark.png)
 
+## Why this exists
+
+KX3-Rig shamelessly reuses (excuse me, "forks") WSJT-X and Hamlib 4.5.5. It doesn't do anything
+new. It is just very, very customized to one station and one operator's UI opinions: an
+Elecraft KX3, a Digirig, an AlexLoop, and a General license in Seattle.
+
+That is the point. Anyone can use or fork it, and with gear like this it should work out of the
+box. Where it shines is as a starting point for **agentic coding**. The repo carries the
+reference material and the rules a coding agent needs to change a radio app safely:
+
+- sourced radio facts in [docs/references.md](docs/references.md)
+- transmit safety rules and conventions in [CLAUDE.md](CLAUDE.md)
+- an emulator good enough to run the whole app without a radio
+
+Want a quick-bar setting, a different band plan, or support for your antenna? Describe it to
+Claude Code, test it on your equipment, antenna, and local conditions, and it works. The
+development setup (spec, code review, and security review skills, plus conventions) is
+[zat.env](https://github.com/peterzat/zat.env).
+
+[Smartscan](docs/smartscan.md) is the first feature built this way on purpose: a personal
+feature, start to end, because we can.
+
+What KX3-Rig reuses:
+
+- **WSJT-X**: its `jt9` decoder and `ft8code` encoder run as programs. The FT8 waveform, dial
+  frequencies, and contact sequencing and logging rules follow its source and User Guide.
+- **Hamlib 4.5.5**: read, not linked. It cross-checks the CAT commands, supplies the S-meter
+  calibration, and showed the `K22` state that KX3-Rig restores on exit.
+- **Elecraft's documents**: the KX3 Owner's Manual and Programmer's Reference.
+- **The rules and the band plan**: 47 CFR Part 97 for license privileges, and the ARRL band plan
+  and published QRP calling frequencies for where Smartscan listens.
+- **PSKReporter and NOAA SWPC**: live band conditions for Smartscan.
+- **Backlog**: [WSJT-X Improved](https://sourceforge.net/projects/wsjt-x-improved/) as a place to
+  borrow ideas from.
+
 ## What it does
 
 - **Tune** with a large frequency display. Scroll or drag over any digit to tune that digit,
@@ -22,6 +57,9 @@ It is built for one station today: an Elecraft KX3 connected to an Ubuntu laptop
 - **Listen** on the laptop speakers or a headset. (With the Digirig plugged into PHONES the
   KX3's own speaker is silent, so the app plays the radio for you.)
 - **Talk** with Hold to Talk, using the computer's microphone, in SSB, AM, or FM.
+- **Smartscan** the band: one click sweeps your voice (or CW) segment, outlines stations on the
+  waterfall, keeps a few seconds of each to replay, and marks which bands are open from your grid
+  square right now. Click a station to listen. See [docs/smartscan.md](docs/smartscan.md).
 - **Work FT8**: one click sets the radio up, decodes appear every 15 seconds, and
   double-clicking a CQ runs the whole contact and logs it in ADIF.
 - **Stay legal**: transmit is limited to your license class's privileges (set your callsign,
@@ -83,6 +121,13 @@ including stations that answer you.
    10-second tone. Use it to check SWR and to set **Audio Level** so the KX3 shows 4 to 5 ALC
    bars at your chosen power.
 
+5. **Smartscan.** Peak the loop where you want to hunt, then press **Smartscan**. Green dots on
+   the band buttons show which bands are open near you; stations appear under the waterfall as
+   they are heard. Press play to hear why one was listed, and **Tune** to stop and listen. Stop
+   or Esc puts the radio back where it was.
+
+   ![Smartscan sweeping 20 meters (demo)](docs/screenshots/scan-dark.png)
+
 ## Safety
 
 ![The first transmission on a band asks for confirmation](docs/screenshots/confirm.png)
@@ -99,6 +144,14 @@ including stations that answer you.
   receive-only in this version. The power control never asks for more than the maximum in
   Preferences (10 W by default, the AlexLoop's digital limit).
 - FT8 contacts are always started by you. When one finishes, the app stops transmitting.
+- Smartscan only receives. Every transmit path is refused while it sweeps, and transmitting
+  (or Esc) stops it.
+
+## Privacy
+
+KX3-Rig goes online only while Smartscan is on. It asks PSKReporter for reception reports from
+your 4-character grid square every 5 minutes (no callsign or email is sent), and NOAA SWPC for
+the K index every 15 minutes. Demo mode never goes online.
 
 ## First time with the radio
 
@@ -126,7 +179,7 @@ connection, receive, FT8 decoding, and then transmit into a dummy load, in that 
 
 The code is in `kx3rig/`: `cat.py` (the KX3 command set and allow-list), `radio.py` (the
 serial link), `audio.py` (PipeWire streams), `ft8/` (decode, encode, sequencing, logging),
-and `ui/` (the interface). Sources for every radio fact are in
+`smartscan/` (sweep, detection, heard list, band conditions), and `ui/` (the interface). Sources for every radio fact are in
 [docs/references.md](docs/references.md).
 
 ## Credits
@@ -134,6 +187,9 @@ and `ui/` (the interface). Sources for every radio fact are in
 FT8 encoding and decoding come from **WSJT-X** by Joe Taylor, K1JT, Steve Franke, K9AN,
 Bill Somerville, G4WJS, and the WSJT Development Group. KX3-Rig runs WSJT-X's `jt9` and
 `ft8code` programs; its transmit audio follows WSJT-X's published FT8 waveform definition.
+Smartscan's band conditions come from [PSKReporter](https://pskreporter.info) (Philip
+Gladstone) and the [NOAA Space Weather Prediction Center](https://www.swpc.noaa.gov). CAT
+behavior was cross-checked against [Hamlib](https://hamlib.github.io).
 The interface design follows [Bottles](https://usebottles.com) and the
 [GNOME Human Interface Guidelines](https://developer.gnome.org/hig/).
 

@@ -16,6 +16,15 @@ Source keys:
 - **CFR**: 47 CFR Part 97 (eCFR, current to 2026-10-06), cross-checked against the ARRL band chart.
 - **WSJT**: WSJT-X 3.0.x source and the installed 3.0.2 User Guide; the FT8/FT4 QEX paper
   (Franke, Somerville, Taylor).
+- **FW**: KX3 firmware release notes, https://ftp.elecraft.com/KX3/firmware/ffwnotes.rtf (read
+  2026-10-11).
+- **2M**: *KX3-2M/4M Installation and Operation* rev D,
+  https://ftp.elecraft.com/KX3/Manuals%20Downloads/E740247%20KX3-2M-4M%20Installation%20and%20Operation%20Rev%20D.pdf
+- **BP**: ARRL band plan, https://www.arrl.org/band-plan (read 2026-10-11).
+- **QRP**: QRP calling frequency lists at https://www.qsl.net/aa3sj/Pages/Freq.html and
+  https://www.qsl.net/wb6dwd/QRPFrequencies.htm (they agree; neither names a publisher).
+- **PSKR**: PSKReporter retrieval API, https://pskreporter.info/pskdev.html.
+- **SWPC**: NOAA Space Weather Prediction Center JSON products, https://services.swpc.noaa.gov.
 
 ## CAT protocol (cat.py, radio.py)
 
@@ -132,6 +141,45 @@ phone segments too (97.305(a)).
 - FT8 dial frequencies (USB, WSJT-X `FrequencyList.cpp`): 1.840, 3.573, 7.074, 10.136, 14.074,
   18.100, 21.074, 24.915, 28.074, 50.313 MHz. All are inside General data segments.
 
+## Smartscan (smartscan/)
+
+- The KX3's built-in SCAN (VFO A to VFO B; OM p.17) is started by holding FREQ ENT, which over
+  CAT is only `SWH10` switch emulation (PR p.25, Table 8). KX3-Rig refuses switch emulation, so
+  Smartscan steps the dial itself with `FA` (allow-listed). No settle time is documented for
+  `FA` within a band (PR p.3 gives typical replies under 10 ms); Smartscan waits for the
+  readback, then skips 0.25 s of audio. **UNVERIFIED**: whether `FA` steps click or mute.
+- SSB receive bandwidth is about 2.8 kHz (OM p.22); Smartscan hears 300-2800 Hz audio per step
+  and narrows its steps if `BW;` reports a narrower filter. Per-mode BW limits are not
+  documented (PR p.8 says only "may be quantized and/or range limited").
+- With AGC on, AF level changes are compressed (OM p.22), so the band view's noise curve
+  understates how far a magnetic loop's response falls. **UNVERIFIED** on the radio.
+- Scan ranges (BP), clipped to the class's privileges: voice in the phone portion below the 10 m
+  AM window (29.0 MHz), and 50.1-50.3 MHz SSB on 6 m. CW from the band edge to below the
+  RTTY/data and FT8 sub-bands (for example 14.000-14.070, 7.000-7.074 MHz). 30 m has no
+  voice, so voice falls back to CW there. 60 m is not swept (channelized).
+- Calling frequencies (`bandplan.HOT_SPOTS`): AM calling 3.885, 7.290, 14.286; SSTV 3.845,
+  7.171, 14.230, 28.680; 6 m SSB calling 50.125 (BP). QRP CW 1.810, 3.560, 7.040, 10.106, 14.060,
+  18.096, 21.060, 24.906, 28.060, 50.060; QRP SSB 1.910, 3.985, 7.285, 14.285, 18.130, 21.385,
+  24.950, 28.885 (QRP).
+- PSKReporter (PSKR): `GET /query?receiverCallsign=<grid4>&modify=grid&flowStartSeconds=-900&rronly=1&noactive=1`.
+  "Users are encouraged to retrieve reception data no more often than once every five
+  minutes"; Smartscan polls at that limit, only while on, with no `appcontact` (operator's
+  choice). A live CN87 query (2026-10-12 02:40 UTC) returned 1500 reports from 41 receivers in
+  1.2 s and about 500 KB; 1500 looks like a server cap (it covered the newest 11 of 15 minutes).
+- SWPC: `json/planetary_k_index_1m.json` (`estimated_kp`), polled every 15 minutes. HamQSL's
+  band table was not used: it is a global calculation from the indices, and its terms ask for
+  hourly updates only (https://www.hamqsl.com/solar.html).
+- AlexLoop bandwidth: alexloop.com is a parked domain. Coverage 7-30 MHz (retailer listing);
+  "very high Q, you will need to re-tune with even fairly small frequency changes" (AD5X review,
+  http://www.radiomanual.info/schemi/ACC_antenna/AlexLoop_review.pdf). Approximate 2:1 SWR
+  bandwidth measured indoors by VE3WDM (https://amateurradio.com/the-bandwidth-on-the-alexloop):
+  40 m 10 kHz, 30 m 15 kHz, 20 m 35 kHz, 15 m 50 kHz, 10 m 60 kHz. The demo uses these for its
+  simulated loop.
+- 2 m: the `X` module flag means a KX3-2M or KX3-4M (PR p.21; added in PR rev E12). Transverter
+  bands are `BN16`-`BN24` (PR p.8); the module defaults to XV1 (2M p.3). `FA` enters 2 m directly
+  from other bands, 120-168 MHz (FW, MCU 2.15). 2 m uses the module's own antenna jack (2M p.4).
+  Not used yet.
+
 ## FT8 engine (ft8/)
 
 - `jt9` needs a 16-bit mono 12 kHz WAV and does not check the header: anything else decodes
@@ -162,8 +210,10 @@ phone segments too (97.305(a)).
 
 ## Verified on this station's KX3 (2026-10-11, receive only)
 
-- Replies at 38400 8N2 with RTS/DTR held low: `ID017;`, `OM A-F----BX-02;` (product 02 = KX3;
-  ATU and roofing filter fitted), `RVM02.38;`, `K20;`, `AI0;`, and a well-formed 38-byte `IF`.
+- Replies at 38400 8N2 with RTS/DTR held low: `ID017;`, `OM A-F----BX-02;`, `RVM02.38;`, `K20;`,
+  `AI0;`, and a well-formed 38-byte `IF`. The `OM` format is `OM APF---TBXI0n;` (PR p.21): this
+  radio has the KXAT3 ATU (A), KXFL3 roofing filter (F), KXBC3 charger and clock (B), and a
+  KX3-2M or KX3-4M module (X); no KXPA100 (P), KXAT100 (T), or KXIO2 (I); product 02 = KX3.
 - Firmware MCU 2.38 is below the 2.93 that `SW;` needs, so KX3-Rig shows no SWR readout during
   transmit (it only polls `SW;` on 2.93+). A firmware update would enable it.
 - KX3-Rig connected, followed the radio (7.245850 MHz, DATA), and ran receive audio and the
@@ -184,3 +234,6 @@ phone segments too (97.305(a)).
 5. FT8 transmit level: set Audio Level for 4-5 ALC bars at 5 W using Tune.
 6. Voice: KX3 mic gain for about 5 ALC bars with the laptop or headset microphone; MIC BIAS.
 7. Whether mic gain is stored separately for SSB and DATA (OM is silent).
+8. Smartscan: step time over the real link, `FA` clicks, AGC and the noise curve, detector
+   thresholds on real band noise and SSB, Tune accuracy on SSB, and CW pitch after Tune
+   ([live-test.md](live-test.md) section 5).
