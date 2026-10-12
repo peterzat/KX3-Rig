@@ -77,5 +77,8 @@ titles and buttons, sentence case for descriptions).
 - `smartscan/` detect (voice/CW/carrier in a dwell), plan (sweep steps, RF mapping, calling
   frequencies), heard (merged hearings and clips), conditions (PSKReporter, SWPC, sun), engine
   (the sweep on the main loop). Design and story in docs/smartscan.md.
-- `ui/` window, connect page, radio page, FT8 page, frequency readout, waterfall, meters,
-  preferences, style.css.
+- `looptune/` state (where the AlexLoop is tuned, per-band widths), meter (receive-noise peak),
+  tuner (the GObject the UI uses; reads the operator's TUNE carrier, never keys). Procedure
+  and sources in docs/looptune.md.
+- `ui/` window, connect page, radio page, FT8 page, smartscan, looptune (the guide), frequency
+  readout, waterfall, meters, preferences, style.css.

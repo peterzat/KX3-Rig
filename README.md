@@ -31,8 +31,19 @@ Claude Code, test it on your equipment, antenna, and local conditions, and it wo
 development setup (spec, code review, and security review skills, plus conventions) is
 [zat.env](https://github.com/peterzat/zat.env).
 
-[Smartscan](docs/smartscan.md) is the first feature built this way on purpose: a personal
-feature, start to end, because we can.
+[Smartscan](docs/smartscan.md) and [Loop Tune](docs/looptune.md) were built this way on
+purpose: personal features, start to end, because we can. Smartscan hunts the band for someone
+to talk to. Loop Tune guides the AlexLoop's tuning procedure and quietly says when it is due.
+Each was researched from sources, designed around this station's rules, and verified against
+the emulator, in one Claude Code session apiece.
+
+The idea behind it is [The Bitter Lesson of Agentic Coding](https://agent-hypervisor.ai/posts/bitter-lesson-of-agentic-coding/):
+"Define what done looks like. Let the model figure out how to get there. Build the simplest
+harness that verifies the work." Here the harness is the references, the rules, and the
+emulator. That makes it easy to repurpose: a different station is a different few paragraphs
+of intent. It also means a professional, polished app can exist for an audience of one, a
+really custom ham shack. Everyone can have one. The whole journey is in
+[docs/custom-shack.md](docs/custom-shack.md).
 
 What KX3-Rig reuses:
 
@@ -40,7 +51,11 @@ What KX3-Rig reuses:
   frequencies, and contact sequencing and logging rules follow its source and User Guide.
 - **Hamlib 4.5.5**: read, not linked. It cross-checks the CAT commands, supplies the S-meter
   calibration, and showed the `K22` state that KX3-Rig restores on exit.
-- **Elecraft's documents**: the KX3 Owner's Manual and Programmer's Reference.
+- **Elecraft's documents**: the KX3 Owner's Manual, its errata, the Programmer's Reference, and
+  the KXAT3 instructions.
+- **AlexLoop know-how**: the manufacturer's archived tuning procedure, VE3WDM's bandwidth
+  measurements, AD5X's review, and two decades of operators' notes on the Elecraft list and
+  QRP blogs, for Loop Tune.
 - **The rules and the band plan**: 47 CFR Part 97 for license privileges, and the ARRL band plan
   and published QRP calling frequencies for where Smartscan listens.
 - **PSKReporter and NOAA SWPC**: live band conditions for Smartscan.
@@ -60,6 +75,10 @@ What KX3-Rig reuses:
 - **Smartscan** the band: one click sweeps your voice (or CW) segment, outlines stations on the
   waterfall, keeps a few seconds of each to replay, and marks which bands are open from your grid
   square right now. Click a station to listen. See [docs/smartscan.md](docs/smartscan.md).
+- **Tune the loop**: a guide for the AlexLoop. It peaks the loop on receive noise with a live
+  meter, then checks it with a short, low-power TUNE that you key on the radio. A small tag
+  under the frequency turns amber when you have moved far enough, or changed band, to need it
+  again. See [docs/looptune.md](docs/looptune.md).
 - **Work FT8**: one click sets the radio up, decodes appear every 15 seconds, and
   double-clicking a CQ runs the whole contact and logs it in ADIF.
 - **Stay legal**: transmit is limited to your license class's privileges (set your callsign,
@@ -109,10 +128,18 @@ including stations that answer you.
 2. **Tune.** Pick a band, pick a mode, and tune. Turn up the volume at the bottom left to hear
    the radio. The **Radio audio** meter at the bottom right should sit in the green; if it
    doesn't, adjust the KX3's AF gain knob.
-3. **Talk.** In LSB, USB, AM, or FM, hold **Hold to Talk** and speak. The first time on a
-   band, KX3-Rig asks you to confirm and reminds you to retune a magnetic loop antenna. Set the KX3's mic
-   gain so its ALC shows about 5 bars while you speak.
-4. **FT8.** Open the **FT8** view and press **Tune Radio to FT8** (or choose a band). After a
+3. **Tune the loop.** Press **Tune Loop** (or the amber **Tune Loop** tag under the
+   frequency). The first time, it asks for two KX3 menu settings: TUN PWR 1.0 W and ATU MD BYP.
+   Then turn the loop's knob for the loudest band noise, with the meter showing the peak. Hold
+   XMIT on the KX3 and nudge the knob for the lowest SWR, then tap XMIT. The tag reads
+   **Loop Tuned** until you move away.
+
+   ![Loop Tune peaking the loop on receive noise (demo)](docs/screenshots/loop-peak-dark.png)
+
+4. **Talk.** In LSB, USB, AM, or FM, hold **Hold to Talk** and speak. The first time on a
+   band, KX3-Rig asks you to confirm and says whether the loop is tuned for the frequency. Set
+   the KX3's mic gain so its ALC shows about 5 bars while you speak.
+5. **FT8.** Open the **FT8** view and press **Tune Radio to FT8** (or choose a band). After a
    cycle or two, decodes appear. Double-click a CQ to answer it, or press **Call CQ**. The app
    sends each message on time, follows the exchange, and logs the contact when it is
    complete. **Stop** (or Esc) ends it immediately.
@@ -121,7 +148,8 @@ including stations that answer you.
    10-second tone. Use it to check SWR and to set **Audio Level** so the KX3 shows 4 to 5 ALC
    bars at your chosen power.
 
-5. **Smartscan.** Peak the loop where you want to hunt, then press **Smartscan**. Green dots on
+6. **Smartscan.** Press **Smartscan**. If the loop isn't tuned for the band, Loop Tune opens
+   first and starts the sweep when you finish. Green dots on
    the band buttons show which bands are open near you; stations appear under the waterfall as
    they are heard. Press play to hear why one was listed, and **Tune** to stop and listen. Stop
    or Esc puts the radio back where it was.
@@ -144,6 +172,9 @@ including stations that answer you.
   receive-only in this version. The power control never asks for more than the maximum in
   Preferences (10 W by default, the AlexLoop's digital limit).
 - FT8 contacts are always started by you. When one finishes, the app stops transmitting.
+- Loop Tune never transmits. The carrier it asks for is the KX3's own TUNE, started and
+  stopped by your hand on XMIT; KX3-Rig only reads the power and SWR. It never changes radio
+  menus either: it asks you to set TUN PWR and ATU MD.
 - Smartscan only receives. Every transmit path is refused while it sweeps, and transmitting
   (or Esc) stops it.
 
@@ -179,7 +210,8 @@ connection, receive, FT8 decoding, and then transmit into a dummy load, in that 
 
 The code is in `kx3rig/`: `cat.py` (the KX3 command set and allow-list), `radio.py` (the
 serial link), `audio.py` (PipeWire streams), `ft8/` (decode, encode, sequencing, logging),
-`smartscan/` (sweep, detection, heard list, band conditions), and `ui/` (the interface). Sources for every radio fact are in
+`smartscan/` (sweep, detection, heard list, band conditions), `looptune/` (loop state,
+receive-noise meter, TUNE readout), and `ui/` (the interface). Sources for every radio fact are in
 [docs/references.md](docs/references.md).
 
 ## Credits
@@ -189,7 +221,9 @@ Bill Somerville, G4WJS, and the WSJT Development Group. KX3-Rig runs WSJT-X's `j
 `ft8code` programs; its transmit audio follows WSJT-X's published FT8 waveform definition.
 Smartscan's band conditions come from [PSKReporter](https://pskreporter.info) (Philip
 Gladstone) and the [NOAA Space Weather Prediction Center](https://www.swpc.noaa.gov). CAT
-behavior was cross-checked against [Hamlib](https://hamlib.github.io).
+behavior was cross-checked against [Hamlib](https://hamlib.github.io). Loop Tune's procedure
+follows AlexLoop maker Alex Grimberg, PY1AHD, and the published experience of many operators,
+credited in [docs/references.md](docs/references.md#loop-tune-looptune).
 The interface design follows [Bottles](https://usebottles.com) and the
 [GNOME Human Interface Guidelines](https://developer.gnome.org/hig/).
 

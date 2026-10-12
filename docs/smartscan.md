@@ -8,7 +8,9 @@ open from your location. It never transmits.
 
 ## Using it
 
-Press **Smartscan** on the Radio view. Within a second or two:
+Press **Smartscan** on the Radio view. If the loop isn't tuned for the band,
+[Loop Tune](looptune.md) opens first and starts the sweep when you finish. Within a second or
+two:
 
 - **The band buttons get a dot.** Green means open, amber means some activity, gray means quiet.
   Hover over a band button for the reason, for example "20 m: Open. 125 stations heard by 25 near
@@ -94,7 +96,9 @@ The AlexLoop is the primary antenna and nothing is tuned for anything else. A di
 wire works with Smartscan unchanged. The band view's noise curve just comes out flat (no
 loop resonance), which is informative in itself. Two behaviors assume the loop:
 
-- Changing band stops the sweep and says to peak the loop.
+- Changing band stops the sweep and offers [Loop Tune](looptune.md), which starts the sweep
+  again when the loop is tuned. Starting Smartscan on a band the loop is not tuned for opens
+  Loop Tune first.
 - The band view's tooltip explains a noise drop as "the antenna hears less here".
 
 If a wire antenna becomes a regular, the smallest useful change is an **Antenna** preference

@@ -65,6 +65,20 @@ anything verified in [references.md](references.md) ("Open items to verify on th
 - CW: switch to CW on 40 m and start Smartscan. Steps happen in USB. Tune to a CW station and
   note the pitch you hear it at (it should be your sidetone pitch).
 
+## 6. Loop Tune (the operator keys TUNE)
+
+- Once: set MENU > TUN PWR to 1.0 W and ATU MD to BYP (the guide's first page).
+- After connecting, the Loop tag reads **Tune Loop** in amber and a notification offers the
+  guide. Open it on 20 m USB.
+- Peak: detune the loop, then turn through resonance. Note how many dB the meter's "from the
+  best" figure spans, and whether "That is the peak" agrees with your ear.
+- TUNE: hold XMIT. The guide should switch to "TUNE is on the air" within half a second and
+  show about 1.0 W (open item 9). If it does not notice TUNE, note it: `IF`/`TQ` may not report
+  front-panel TUNE. Note the KX3's SWR at the dip and whether the loop's LED is visible.
+- Tap XMIT. Answer the SWR question; the guide finishes and the tag reads **Loop Tuned**.
+- Move 10 kHz on 20 m: the tag turns amber (**Peak Loop**). Change to 40 m: **Tune Loop**, and
+  a notification. Start Smartscan there: the guide opens first and starts the sweep when done.
+
 ## After
 
 - Start WSJT-X once to confirm the radio still works with it (KX3-Rig restores the

@@ -180,6 +180,79 @@ phone segments too (97.305(a)).
   from other bands, 120-168 MHz (FW, MCU 2.15). 2 m uses the module's own antenna jack (2M p.4).
   Not used yet.
 
+## Loop Tune (looptune/)
+
+Elecraft documents (OM, PR, FW above, plus **ERR**: OM errata C5-3 and C5-4,
+https://ftp.elecraft.com/KX3/Manuals%20Downloads/; **KXAT3**: KXAT3 Installation Instructions
+rev A1). Tap is the labeled function, hold (about half a second) the one below it (OM p.3).
+
+- XMIT tap = transmit; hold = **TUNE**, "Transmit CW carrier at PWR level (or MENU:TUN PWR
+  level, if lower)" (OM p.7, p.14). SWR shows on VFO A during TUNE (OM p.14); tap XMIT to leave
+  TUNE (OM p.33). No TUNE time limit is documented.
+- **TUN PWR** (MN058): NOR follows the PWR knob, otherwise a fixed 0-10 W for TUNE only. "TUN
+  PWR does not pertain to ATU TUNE, which uses 2 or 3 W (KXAT3)" (OM p.41; FW 0.77: 2 W below
+  9 V supply).
+- **ATU TUNE** is a tap (hold is ANT, KXAT100 only). It needs ATU MD = AUTO. Matching "takes an
+  average of 4 seconds, initially. Settings are then recalled instantly on band change, as well
+  as when you transmit after moving the VFO a significant distance" (OM p.14). The KXAT3 stores
+  matches "at multiple points across each band" (KXAT3 p.1), in two data sets since MCU 2.76
+  (ERR). It is an 8L/8C L-network, rated 15 W, under 0.5 dB loss in bypass 160-10 m (OM
+  p.50, p.54).
+- **ATU MD** (MN023): BYP or AUTO, set in the menu only (OM p.36). Tapping CLR in ATU MD clears
+  the band's stored data (OM p.36; ERR).
+- Menu use: hold MENU; OFS/VFO B scrolls entries; VFO A changes the value; hold MENU to exit
+  (OM p.9).
+- High SWR: "the KX3 reduces power if SWR is high" and may drop out of transmit (OM p.6, p.45).
+- CAT: no command starts TUNE or ATU TUNE except switch emulation (`SWH16` TUNE, `SWT44` ATU
+  TUNE; PR p.25, p.5), which KX3-Rig refuses. `SW` reads SWR "during transmit, TUNE, and during
+  ATU tuning" (PR p.24). The PR's change list says firmware 2.93 (p.33); the public release
+  notes list the SWR read command under MCU 2.95. Either way this radio's 2.38 lacks it. `PO`
+  is "estimated from the KX3's or KX2's drive level" (PR p.22). `TQ1` is documented for PTT
+  and pseudo-transmit; **UNVERIFIED** for front-panel TUNE (KX3-Rig sees transmit through the
+  `IF` TX flag or `TQ`). `AK` (ATU relay bitmaps) cannot tell BYP from AUTO (PR p.7), so
+  KX3-Rig does not read the ATU state.
+- Nothing in Elecraft's documents mentions magnetic loops.
+
+AlexLoop (PY1AHD). alexloop.com is parked; pages were read from the Wayback Machine:
+
+- Coverage 6.95-29.7 MHz (kit page, web.archive.org/web/20100224225743/http://alexloop.com:80/instructions.html);
+  HamPack "From 7 MHz to 30 MHz", "Maximum Power: 25 Watts SSB; 10 Watts AM / FM / CW / Digital
+  Modes", and "The built in AlexTune will make the LED shine according the best tuning point"
+  (web.archive.org/web/20241015174135/http://alexloop.com/alexloop-hampack-system-artigo44.html).
+  Walkham retail listings: 7-30 MHz, 20 W SSB, 10 W AM/FM/CW (GigaParts).
+- The manufacturer's tuning procedure (RC-2 page, web.archive.org/web/20250623054313/http://alexloop.com/artigo45.html):
+  "Sudden increase of the band noise indicates that the operator is near the best tuning
+  point." Then select a continuous carrier mode, key it, and "turn the tuning knob right and
+  left until the LED shines the brightest. The transceiver will now show the lowest SWR."
+- Use about 1 m above ground with the knob in reach; no radials
+  (web.archive.org/web/20101025081152/http://alexloop.com/instructions2.html).
+- One split-stator capacitor on a reduction drive covers the range in about 270 degrees (AD5X
+  review, above). The LED is an RF field indicator, lit only in transmit, dimmer on lower
+  bands (Passion Radio AlexTune page, https://www.passion-radio.com/tuners/alex-tune-2634.html).
+- Bandwidth: VE3WDM's 2:1 figures (above) are the table in `looptune/state.py`. Sotabeams
+  measured 12/16/24 kHz on 40/30/20 m outdoors (https://www.sotabeams.co.uk/blog/alex-loop-measurements/);
+  operators report retuning after about 5 kHz on 40 m (K6DGW) and 20 kHz on 20 m (VE3WDM).
+  17 m and 12 m are interpolated.
+- ATU with the loop, against: K6DGW ("No ATU's, ever... Off resonance, it becomes an MDL",
+  https://www.mail-archive.com/elecraft@mailman.qth.net/msg167409.html; "You MUST bypass the
+  ATU", msg196652), W1GCF (msg254457), K2ULR ("the loop =is= the tuner", msg196656), AC3B (ATU
+  MD BYP, TUN PWR 1 W, peak noise, then TUNE; https://qrper.com/2022/10/improving-my-mag-loop-tuning-skills/),
+  G4ILO ("That's not how a magnetic loop is supposed to be used",
+  https://www.amateurradio.com/alexloop-gets-an-airing/). Conditional: AC7AC and VE3WMB, to trim
+  a residual mismatch at resonance, then recheck the loop (msg189422, msg189457). KX3-Rig
+  follows the first group and offers the ATU only as a last resort.
+- Tune power reported: 1 W (AC3B, K2ULR), 2 W, 5 W (EI2CN, msg170338), 10 W (AD5X). "Even at
+  QRP levels you can get 1,000 volts across the cap" (AA1IK,
+  https://www.amateurradio.com/5-foot-diameter-magnetic-loop-antenna/).
+- Hand effect: VE3WDM saw 1.2 rise to 2.2 when he moved back to the radio and tuned from behind
+  the loop to avoid it (https://www.amateurradio.com/learning-more-about-the-alexloop/); AD5X and
+  G4ILO saw little. Nearby objects matter indoors (G4ILO 5:1 beside bookshelves; VE3WDM near a
+  balcony door).
+- Results when tuned: 1.3-1.4 on 40-12 m and 1.6 on 10 m without the ATU (AD5X); 1.2-1.5
+  (EI2CN).
+- **UNVERIFIED** at this station: TQ during TUNE, PO at 1 W, the noise peak through AGC, LED
+  visibility at 1 W on 40 m, hand effect.
+
 ## FT8 engine (ft8/)
 
 - `jt9` needs a 16-bit mono 12 kHz WAV and does not check the header: anything else decodes
@@ -237,3 +310,5 @@ phone segments too (97.305(a)).
 8. Smartscan: step time over the real link, `FA` clicks, AGC and the noise curve, detector
    thresholds on real band noise and SSB, Tune accuracy on SSB, and CW pitch after Tune
    ([live-test.md](live-test.md) section 5).
+9. Loop Tune: `IF`/`TQ` during front-panel TUNE, `PO` at TUN PWR 1.0 W, the receive-noise peak
+   through AGC, the LED at 1 W on 40 m ([live-test.md](live-test.md) section 6).
