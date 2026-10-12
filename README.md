@@ -33,7 +33,7 @@ Claude Code, then test it on your own equipment and local conditions. The develo
 purpose: personal features, start to end, because we can. Smartscan hunts the band for someone
 to talk to. Loop Tune guides the AlexLoop's tuning procedure and quietly says when it is due.
 Each was researched from sources, designed around this station's rules, and verified against
-the emulator, in one Claude Code session apiece.
+the emulator, both in a single Claude Code session.
 
 ![Smartscan sweeping 20 meters (demo)](docs/screenshots/scan-dark.png)
 

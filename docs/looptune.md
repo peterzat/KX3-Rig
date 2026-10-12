@@ -15,12 +15,13 @@ reports, this is the best way to tune an AlexLoop on a KX3 with the internal ATU
    transmitted.
 3. **Fine-tune with a short carrier.** Make sure the frequency is clear, then hold XMIT on the
    KX3 (TUNE, a 1 W carrier). Nudge the knob for the lowest SWR and the brightest LED, working
-   from behind the loop. Let go, check again, and tap XMIT to stop.
+   from behind the loop. Let go, check again, and tap XMIT to stop. If the LED is too faint to
+   see at 1 W (most likely on 40 m), raise TUN PWR to 2 or 3 W.
 4. **Aim for 1.5:1 or better.** If the SWR stays above 2:1, move the loop away from walls,
    metal, and people, and peak it again. Use the ATU only as a last resort, to trim a small
    leftover mismatch on a loop that is already resonant, never in place of tuning the loop.
 5. **Retune** after a band change, after moving more than about half the loop's 2:1 width (5 kHz
-   on 40 m, 17 kHz on 20 m), or when the loop or anything near it moves.
+   on 40 m, 17.5 kHz on 20 m), or when the loop or anything near it moves.
 
 The reasoning and sources are in [The procedure, and why](#the-procedure-and-why).
 
