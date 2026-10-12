@@ -282,3 +282,56 @@ class DataTransmit:
 
     def stop(self) -> None:
         self._finish()
+
+
+class ClipPlayer:
+    """Plays recorded receive audio (a Smartscan clip) to a listening output.
+
+    sink_node is a PipeWire node name, never the Digirig (the caller picks it
+    the same way as for listening), or "auto" for the platform default where
+    there is no PipeWire (demo mode on macOS). on_done runs on the main loop.
+    """
+
+    def __init__(self, samples: np.ndarray, rate: int, sink_node: str, volume: float,
+                 on_done: Callable[[], None] | None = None, on_error: Callable[[str], None] | None = None):
+        self._done_cb = on_done
+        self._finished = threading.Event()
+        self._p = _Pipeline("kx3rig-clip", on_error)
+        peak = float(np.max(np.abs(samples))) if len(samples) else 0.0
+        gain = 0.5 / peak if peak > 0.5 else 1.0
+        data = np.clip(np.asarray(samples, np.float32) * gain, -1.0, 1.0).astype(np.float32)
+        src = _make("appsrc", format=Gst.Format.TIME, is_live=False, block=False)
+        src.set_property("caps", Gst.Caps.from_string(f"audio/x-raw,format=F32LE,rate={rate},channels=1,layout=interleaved"))
+        if sink_node == "auto":
+            out = _make("autoaudiosink")
+        else:
+            out = _make("pipewiresink", target_object=sink_node, client_name="KX3-Rig")
+            out.set_property("stream-properties", _stream_props("Communication", "KX3-Rig clip replay"))
+        vol = _make("volume", volume=max(0.0, min(1.5, float(volume))))
+        self._p.add(src, c := _make("audioconvert"), r := _make("audioresample"), vol, out)
+        _link(src, c, r, vol, out)
+        self._p.on_eos = self._finish
+        buf = Gst.Buffer.new_wrapped(data.tobytes())
+        buf.pts = 0
+        buf.duration = Gst.util_uint64_scale(len(data), Gst.SECOND, rate)
+        self._src = src
+        self._buf = buf
+
+    def start(self) -> None:
+        self._p.start()
+        self._src.emit("push-buffer", self._buf)
+        self._src.emit("end-of-stream")
+
+    def _finish(self) -> None:
+        if self._finished.is_set():
+            return
+        self._finished.set()
+        self._p.stop()
+        if self._done_cb:
+            GLib.idle_add(self._done_cb)
+
+    def stop(self) -> None:
+        if self._finished.is_set():
+            return
+        self._finished.set()
+        self._p.stop()

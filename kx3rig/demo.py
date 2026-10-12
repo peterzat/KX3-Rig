@@ -12,6 +12,7 @@ from __future__ import annotations
 import threading
 import time
 from collections.abc import Callable
+from dataclasses import dataclass
 
 import numpy as np
 
@@ -19,6 +20,127 @@ from .cat import Mode
 
 RATE = 12_000
 CHUNK = 256
+
+
+def synth_voice(seconds: float, rate: int, center_hz: float = 1100, amp: float = 0.05,
+                pitch: float = 140, rng: np.random.Generator | None = None, t0: float = 0.0,
+                shift_hz: float = 0.0, phase: float | None = None) -> np.ndarray:
+    """Speech-like audio: harmonics of a wandering pitch under a formant hump,
+    gated by a syllable-rate envelope. Good enough to exercise detection.
+
+    shift_hz moves the whole spectrum, as an SSB receiver does when it is not
+    tuned to the station's carrier. Time starts at t0 and the phase is
+    computed in closed form, so consecutive blocks join without clicks.
+    """
+    if phase is None:
+        phase = (rng or np.random.default_rng()).uniform(0, 6.3)
+    t = t0 + np.arange(int(round(seconds * rate))) / rate
+    env = np.clip(0.8 * np.sin(2 * np.pi * 3.3 * t + phase) + 0.4 * np.sin(2 * np.pi * 0.7 * t + 2 * phase), 0, None)
+    wobble = 1.3
+    f0 = pitch + 20 * np.sin(2 * np.pi * wobble * t + phase)
+    ph = 2 * np.pi * pitch * t - (20 / wobble) * np.cos(2 * np.pi * wobble * t + phase)
+    out = np.zeros_like(t)
+    for k in range(2, 24):
+        gain = np.exp(-((k * pitch - center_hz) / 700) ** 2)
+        if gain <= 0.02:
+            continue
+        audio_hz = k * f0 + shift_hz
+        audible = (audio_hz > 150) & (audio_hz < 3_000) & (k * f0 < 2_700)
+        if audible.any():
+            out += gain * np.sin(k * ph + 2 * np.pi * shift_hz * t) * audible
+    return (amp * env * out).astype(np.float32)
+
+
+def synth_cw(seconds: float, rate: int, freq: float = 700, amp: float = 0.03, wpm: float = 18,
+             t0: float = 0.0) -> np.ndarray:
+    """A keyed tone: dits and dahs with spaces, at roughly `wpm`."""
+    t = t0 + np.arange(int(round(seconds * rate))) / rate
+    dot = 1.2 / wpm
+    pattern = np.array([1, 0, 1, 1, 1, 0, 1, 0, 0, 0, 1, 1, 1, 0, 1, 0, 1, 1, 1, 0, 0, 0, 0])   # a repeating "word"
+    # Raised-cosine edges (about 5 ms) keep the keying clicks out of the neighbouring bins.
+    pos = t / dot
+    idx = np.floor(pos).astype(int)
+    on = pattern[idx % len(pattern)].astype(np.float32)
+    prev = pattern[(idx - 1) % len(pattern)].astype(np.float32)
+    frac = np.clip((pos - idx) * dot / 0.005, 0, 1)
+    edge = 0.5 - 0.5 * np.cos(np.pi * frac)
+    keyed = prev + (on - prev) * edge
+    return (amp * keyed * np.sin(2 * np.pi * freq * t)).astype(np.float32)
+
+
+# --- a band full of stations, heard through a magnetic loop ------------------------------
+
+# Approximate 2:1 SWR bandwidth of the AlexLoop per band (VE3WDM's indoor
+# measurements, docs/references.md). The demo uses it as the loop's -3 dB
+# receive bandwidth: good enough to make the band view's noise curve look right.
+LOOP_BANDWIDTH_HZ = {"40m": 10_000, "30m": 15_000, "20m": 35_000, "17m": 42_000,
+                     "15m": 50_000, "12m": 55_000, "10m": 60_000}
+CW_PITCH = 600
+
+
+@dataclass(frozen=True)
+class DemoStation:
+    rf: int            # carrier (voice) or signal (CW) frequency
+    kind: str          # "voice" or "cw"
+    amp: float
+    on_s: float        # transmits for this long ...
+    off_s: float       # ... then listens for this long (the other side, unheard)
+    offset_s: float
+    pitch: float = 130
+
+    def keyed(self, wall: float) -> bool:
+        return (wall + self.offset_s) % (self.on_s + self.off_s) < self.on_s
+
+
+def demo_stations() -> list[DemoStation]:
+    """A few voice and CW stations on each band, at plausible frequencies."""
+    from . import bandplan
+
+    out: list[DemoStation] = []
+    rng = np.random.default_rng(73)
+    for band in bandplan.BANDS:
+        for kind, count in (("voice", 6), ("cw", 4)):
+            ranges = bandplan.scan_ranges(band, kind, "General")
+            if not ranges:
+                continue
+            low, high = ranges[0]
+            for i in range(count):
+                if kind == "voice":
+                    rf = int(round(rng.uniform(low + 3_000, high - 3_000) / 1_000) * 1_000)
+                    on, off = rng.uniform(8, 16), rng.uniform(3, 8)
+                else:
+                    rf = int(round(rng.uniform(low + 1_000, high - 1_000) / 50) * 50)
+                    on, off = rng.uniform(10, 20), rng.uniform(2, 5)
+                out.append(DemoStation(rf, kind, float(rng.uniform(0.015, 0.08)), on, off,
+                                       float(rng.uniform(0, 30)), float(rng.uniform(100, 190))))
+    # The "voice" screenshot plan tunes to 14.285: always someone there.
+    out.append(DemoStation(14_285_000, "voice", 0.07, 20, 2, 0, 140))
+    return out
+
+
+class DemoLoop:
+    """Where the demo's magnetic loop is tuned: wherever the dial rests a while."""
+
+    REST_S = 8.0
+
+    def __init__(self) -> None:
+        self.tuned_hz = 0
+        self._dial = 0
+        self._since = 0.0
+
+    def gain(self, dial: int, wall: float) -> float:
+        from . import bandplan
+
+        if dial != self._dial:
+            self._dial, self._since = dial, wall
+        elif wall - self._since > self.REST_S or not self.tuned_hz:
+            self.tuned_hz = dial
+        band = bandplan.band_for(dial)
+        bw = LOOP_BANDWIDTH_HZ.get(band.name if band else "", 0)
+        if not bw or bandplan.band_for(self.tuned_hz) is not band:
+            return 0.25 if bw else 1.0
+        x = 2 * (dial - self.tuned_hz) / bw
+        return float(1 / np.sqrt(1 + x * x))
 
 
 class DemoAudio:
@@ -35,6 +157,8 @@ class DemoAudio:
         self._noise_state = np.zeros(2)
         # Bandpass shaping for receiver noise, roughly 250-2900 Hz.
         self._fir = self._design_bandpass(250, 2900)
+        self._stations = demo_stations()
+        self.loop = DemoLoop()
 
     def start(self) -> None:
         self._thread = threading.Thread(target=self._run, name="demo-audio", daemon=True)
@@ -65,8 +189,12 @@ class DemoAudio:
             shaped = np.convolve(block, self._fir, mode="valid").astype(np.float32)
             tail = block[-(len(self._fir) - 1):]
             t = (sample_index + np.arange(CHUNK)) / RATE
-            signal = self._signals(t, time.time())
-            out = shaped * 4.0 + signal
+            wall = time.time()
+            signal = self._signals(t, wall)
+            # Band noise and signals both come through the loop; the receiver's
+            # own noise does not, so the floor drops (but not to nothing) off tune.
+            g = self.loop.gain(getattr(self._radio_state(), "frequency", 0), wall)
+            out = shaped * 4.0 * (0.3 + 0.7 * g) + signal * g
             sample_index += CHUNK
             self._on_samples(out.astype(np.float32), time.time())
             t_next += CHUNK / RATE
@@ -80,18 +208,28 @@ class DemoAudio:
             return out
         if mode is not None and mode.is_data:
             out += self._ft8_like(t, wall)
-        elif mode is not None and mode.is_cw:
-            # A CW station sending dits at 600 Hz.
-            keyed = (np.floor(t * 8) % 3 != 2).astype(np.float32) * (np.floor(t / 4) % 2 == 0)
-            out += 0.08 * keyed * np.sin(2 * np.pi * 620 * t)
-        elif mode in (Mode.USB, Mode.LSB, Mode.AM):
-            # Two voice-like stations: band-limited tones with a syllabic envelope.
-            for base, rate, amp in ((900, 3.1, 0.09), (2300, 4.3, 0.04)):
-                env = np.clip(np.sin(2 * np.pi * rate * t) * np.sin(2 * np.pi * 0.37 * t), 0, None)
-                tone = sum(np.sin(2 * np.pi * (base + k * 140 + 40 * np.sin(2 * np.pi * 1.7 * t)) * t) / (k + 1) for k in range(5))
-                out += amp * env * tone
-        _ = freq
+        elif mode is not None and (mode.is_cw or mode in (Mode.USB, Mode.LSB, Mode.AM)):
+            out += self._band(t, wall, freq, mode)
         return out.astype(np.float32)
+
+    def _band(self, t: np.ndarray, wall: float, dial: int, mode: Mode) -> np.ndarray:
+        """The demo stations audible at this dial frequency and mode."""
+        out = np.zeros(len(t), np.float32)
+        lsb = mode in (Mode.LSB, Mode.CW_REV)
+        for st in self._stations:
+            if abs(st.rf - dial) > 4_000 or not st.keyed(wall):
+                continue
+            # Audio offset of the station's carrier (voice) or tone (CW).
+            shift = (dial - st.rf) if lsb else (st.rf - dial)
+            if mode.is_cw:
+                shift += CW_PITCH if st.kind == "cw" else 0
+            if st.kind == "voice":
+                if lsb and mode is Mode.LSB or not lsb and mode is Mode.USB or mode is Mode.AM:
+                    out += synth_voice(len(t) / RATE, RATE, center_hz=900, amp=st.amp, pitch=st.pitch,
+                                       t0=t[0], shift_hz=shift, phase=st.offset_s)
+            elif 150 < shift < 3_000:
+                out += synth_cw(len(t) / RATE, RATE, freq=shift, amp=st.amp, t0=t[0] + st.offset_s)
+        return out
 
     def _ft8_like(self, t: np.ndarray, wall: float) -> np.ndarray:
         slot = int(wall // 15)

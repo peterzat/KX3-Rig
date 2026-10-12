@@ -215,6 +215,93 @@ def privilege_segments(band: Band, license_class: str = "General") -> list[Segme
     return [s for s in PRIVILEGES.get(license_class, TECHNICIAN) if band.low <= s.low < band.high]
 
 
+# Where Smartscan listens, from the ARRL band plan (arrl.org/band-plan, read
+# 2026-10-11). Voice: the phone portion where SSB lives; on 10 m it stops at
+# the AM window (29.0 MHz) and on 6 m it is the 50.1-50.3 SSB area. CW: the
+# bottom of the CW/data segment, below the RTTY/data and FT8 sub-bands, so
+# the sweep does not stop on every digital signal. Each range is clipped to
+# the operator's privileges at run time (scan_ranges).
+SCAN_VOICE: dict[str, tuple[int, int]] = {
+    "160m": (1_843_000, 2_000_000),
+    "80m": (3_600_000, 4_000_000),
+    "40m": (7_125_000, 7_300_000),
+    "20m": (14_150_000, 14_350_000),
+    "17m": (18_110_000, 18_168_000),
+    "15m": (21_200_000, 21_450_000),
+    "12m": (24_930_000, 24_990_000),
+    "10m": (28_300_000, 29_000_000),
+    "6m": (50_100_000, 50_300_000),
+}
+SCAN_CW: dict[str, tuple[int, int]] = {
+    "160m": (1_800_000, 1_838_000),     # below the FT8 dial at 1.840
+    "80m": (3_500_000, 3_570_000),
+    "40m": (7_000_000, 7_074_000),      # RTTY/data from 7.080; FT8 at 7.074
+    "30m": (10_100_000, 10_130_000),
+    "20m": (14_000_000, 14_070_000),
+    "17m": (18_068_000, 18_100_000),
+    "15m": (21_000_000, 21_070_000),
+    "12m": (24_890_000, 24_915_000),    # FT8 at 24.915
+    "10m": (28_000_000, 28_070_000),
+    "6m": (50_000_000, 50_100_000),
+}
+
+
+@dataclass(frozen=True)
+class HotSpot:
+    hz: int
+    kind: str          # "voice", "cw", or "sstv"
+    label: str
+
+
+# Where people gather. AM, SSTV, and 6 m SSB calling frequencies are from the
+# ARRL band plan; QRP calling frequencies from two published QRP lists that
+# agree (qsl.net/aa3sj/Pages/Freq.html, qsl.net/wb6dwd/QRPFrequencies.htm,
+# read 2026-10-11). Smartscan revisits the voice and CW ones between regular
+# steps and labels stations heard on them; SSTV ones only label (pictures,
+# not a conversation).
+HOT_SPOTS: list[HotSpot] = [
+    HotSpot(1_810_000, "cw", "QRP calling"), HotSpot(1_910_000, "voice", "QRP calling"),
+    HotSpot(3_560_000, "cw", "QRP calling"), HotSpot(3_845_000, "sstv", "SSTV"),
+    HotSpot(3_885_000, "voice", "AM calling"), HotSpot(3_985_000, "voice", "QRP calling"),
+    HotSpot(7_040_000, "cw", "QRP calling"), HotSpot(7_171_000, "sstv", "SSTV"),
+    HotSpot(7_285_000, "voice", "QRP calling"), HotSpot(7_290_000, "voice", "AM calling"),
+    HotSpot(10_106_000, "cw", "QRP calling"),
+    HotSpot(14_060_000, "cw", "QRP calling"), HotSpot(14_230_000, "sstv", "SSTV"),
+    HotSpot(14_285_000, "voice", "QRP calling"), HotSpot(14_286_000, "voice", "AM calling"),
+    HotSpot(18_096_000, "cw", "QRP calling"), HotSpot(18_130_000, "voice", "QRP calling"),
+    HotSpot(21_060_000, "cw", "QRP calling"), HotSpot(21_385_000, "voice", "QRP calling"),
+    HotSpot(24_906_000, "cw", "QRP calling"), HotSpot(24_950_000, "voice", "QRP calling"),
+    HotSpot(28_060_000, "cw", "QRP calling"), HotSpot(28_680_000, "sstv", "SSTV"),
+    HotSpot(28_885_000, "voice", "QRP calling"),
+    HotSpot(50_060_000, "cw", "QRP calling"), HotSpot(50_125_000, "voice", "SSB calling"),
+]
+
+
+def hot_spots(band: Band) -> list[HotSpot]:
+    return [h for h in HOT_SPOTS if band.contains(h.hz)]
+
+
+def scan_ranges(band: Band, kind: str, license_class: str = "General") -> list[tuple[int, int]]:
+    """RF ranges Smartscan sweeps on a band for "voice" or "cw", inside the
+    class's privileges for that emission. Empty when there is nothing to sweep
+    (60 m, or no privileges)."""
+    table, emission = (SCAN_VOICE, PHONE) if kind == "voice" else (SCAN_CW, CW)
+    if band.name not in table:
+        return []
+    low, high = table[band.name]
+    out = []
+    for seg in PRIVILEGES.get(license_class, TECHNICIAN):
+        if emission not in seg.kinds:
+            continue
+        lo, hi = max(low, seg.low), min(high, seg.high)
+        if hi - lo >= 1_000:
+            if out and out[-1][1] >= lo:
+                out[-1] = (out[-1][0], max(out[-1][1], hi))
+            else:
+                out.append((lo, hi))
+    return out
+
+
 # Tuning step presets per mode (Hz): (fine, coarse). SSB stations align on
 # 0.5/1 kHz; CW wants finer steps (KX3 Owner's Manual p.11).
 STEPS = {

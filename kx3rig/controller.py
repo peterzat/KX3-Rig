@@ -87,6 +87,10 @@ class Station(GObject.Object):
         self._audio_timer = 0
         self._demo_source = None
         self._rx_error = ""
+        # Set by Smartscan while it sweeps: the dial moves every second, so
+        # nothing may key the radio until the sweep stops.
+        self.scanning = False
+        self._clip = None
 
         if demo:
             from .fakeradio import FakeKX3
@@ -126,6 +130,7 @@ class Station(GObject.Object):
             self._check_audio()
 
     def shutdown(self) -> None:
+        self.stop_clip()
         self.stop_talking()
         self.stop_data_tx()
         if self._audio_timer:
@@ -204,6 +209,8 @@ class Station(GObject.Object):
                      audio_high: int | None = None) -> TxCheck:
         if not self.connected:
             return TxCheck(False, "The radio isn't connected.")
+        if self.scanning:
+            return TxCheck(False, "Smartscan is sweeping the band. Stop it to transmit.")
         if not self.settings.callsign:
             return TxCheck(False, "Add your callsign in Preferences to transmit.")
         if not self.audio.tx:
@@ -461,7 +468,7 @@ class Station(GObject.Object):
         transmitting = self.radio.ptt or self.radio.transmitting
         # Mute the speakers while transmitting: the KX3 sends its TX monitor to
         # PHONES, and a laptop mic would pick the speakers up (feedback).
-        self._rx.set_muted(not self.settings.listen or transmitting)
+        self._rx.set_muted(not self.settings.listen or transmitting or self._clip is not None)
         self._rx.set_volume(self.settings.listen_volume)
 
     def set_listen(self, on: bool) -> None:
@@ -473,6 +480,60 @@ class Station(GObject.Object):
     def set_listen_volume(self, volume: float) -> None:
         self.settings.listen_volume = volume
         self._apply_listen()
+
+    # --- replaying a recorded clip -----------------------------------------------------------
+
+    def play_clip(self, samples: np.ndarray, rate: int, on_done=None) -> str:
+        """Play recorded receive audio on this computer's speakers.
+
+        Returns "" when playback started, or why it could not. The clip goes to
+        the same output as listening, never the Digirig (that would transmit
+        it), and live radio audio is muted until it ends.
+        """
+        from .audio import ClipPlayer
+
+        self.stop_clip()
+        sink = None
+        if self.demo:
+            import sys
+
+            # macOS has no PipeWire; its audio has no Digirig to avoid.
+            sink = "auto" if sys.platform == "darwin" else self._listen_sink()
+        else:
+            sink = self._listen_sink()
+        if sink is None:
+            return "No speaker or headset found to play the clip on."
+        token = object()
+
+        def done() -> bool:
+            if self._clip is not None and self._clip[0] is token:
+                self._clip = None
+                self._apply_listen()
+                if on_done:
+                    on_done()
+            return False
+
+        try:
+            player = ClipPlayer(samples, rate, sink, self.settings.listen_volume, on_done=done,
+                                on_error=lambda msg: GLib.idle_add(done))
+            self._clip = (token, player)
+            self._apply_listen()
+            player.start()
+        except Exception as exc:
+            self._clip = None
+            self._apply_listen()
+            return f"Could not play the clip: {exc}"
+        return ""
+
+    def stop_clip(self) -> None:
+        clip, self._clip = self._clip, None
+        if clip is not None:
+            clip[1].stop()
+            self._apply_listen()
+
+    @property
+    def clip_playing(self) -> bool:
+        return self._clip is not None
 
     def _on_samples(self, samples: np.ndarray, end_time: float) -> None:
         """Audio thread: feed the waterfall and any sample listeners (FT8)."""
