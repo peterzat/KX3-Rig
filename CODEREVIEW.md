@@ -1,18 +1,18 @@
-## Review — 2026-10-11 (commit: ff6ea82)
+## Review — 2026-10-11 (commit: 4067339)
 
-**Summary:** Refresh review of ff6ea82 ("Fix the window freezing once the Digirig's audio is streaming"), the one commit ahead of `origin/main` (7 files: README.md, docs/references.md, kx3rig/controller.py, kx3rig/devices.py, kx3rig/ui/connect_page.py, tests/test_devices.py, tests/test_station.py). Audio discovery moves from an in-process GStreamer DeviceMonitor to an asynchronous `pw-dump` subprocess with a 5 s timeout, and voice and listen routing read the cached result. The approach is sound and fails closed. One WARN, a scan busy flag that an unexpected exception could latch, was fixed in one /codefix cycle. That fix is uncommitted in controller.py, devices.py, and both test files. One WARN is left for the operator: the commit mixes concerns. /security found no BLOCK or WARN, before or after the fix. Tests: 227 passed (baseline 225; 2 added by the fix).
+**Summary:** Full review of 4067339 ("Use a photo of the station as the README hero image"), the one commit ahead of `origin/main`. It adds docs/screenshots/station.jpg and makes it the README hero image, moving the app screenshot below the introduction. No code changed. The prior entry's commit (ff6ea82) was rewritten into dc44093 and 8a0d4ed and pushed, so refresh conditions did not hold. No BLOCK or WARN. The image's metadata is clean (a macOS screenshot tag and a Display P3 profile; no GPS, camera, owner, or capture date), and nothing personal is legible in it. Tests were not run: this checkout (macOS) has no `.venv` and no PyGObject, and the diff touches no code, so no test can be affected.
 
 **External reviewers:**
 None configured.
 
 **Built-in review:**
-`/code-review high`: 7 findings, 6 kept after Step 6 (merged into 1 WARN and 5 NOTEs). One was dropped as style (the closure `state` dict).
+`/code-review high`: 0 findings.
 
 ### Findings
 
-[WARN] ff6ea82 (commit structure) — The commit mixes concerns. Besides the freeze fix (devices.py, controller.py, both test files, and references.md:96-99 and 169-170), it carries a troubleshooting copy change unrelated to the fix (connect_page.py:183-184, README.md:111, references.md:171-173) and a record of the first live session (references.md:163-168 and 177-179). The commit message discloses both ("Also records ... and leads the not-answering hint with reseating the plugs"), and they are small. Nothing is pushed yet, so splitting is cheap.
-  Evidence: `git show --stat ff6ea82`: the NO_REPLY help text and the README troubleshooting row change wording only. They do not depend on the discovery change.
-  Suggested fix: Operator action, not a code change. Split into a fix commit and a docs and copy commit before pushing. /codefix left it alone, because it needs a history rewrite.
+[NOTE] README.md:7, docs/screenshots/station.jpg — The part on the KX3's antenna jack looks like a finned BNC dummy load (/security read its label as 10 W, DC to 3 GHz; low confidence), while the paragraph under the photo describes a magnetic loop antenna. The alt text "receiving 40 meters" matches the screen (7.245850 MHz, DATA, Receiving, as recorded in docs/references.md:169), so it is not wrong. A reader may take the photo for the operating setup. Optional: say "tuned to 40 meters" or "on a dummy load" in the alt text. (/security)
+
+Carried from the prior entry (code outside this diff and unchanged by it; not re-checked). The prior WARN (ff6ea82 mixed concerns) is resolved: the commit was split into dc44093 and 8a0d4ed before pushing.
 
 [NOTE] kx3rig/devices.py:30, 77-80, 202-213, kx3rig/controller.py:403-411 — The Digirig is recognized by node name alone (`DIGIRIG_NODE_RE`). An audio node created by another program with `usb-C-Media` in its name, created before the Digirig appears, is picked first, because `pw-dump` lists nodes in creation order. Transmit audio would then go to it while RTS keys the radio, and receive audio would come from it. /security is confident in the code behavior but has low confidence that a sandboxed app can create such a node (not verified). Name matching predates this commit. Suggested hardening: refuse transmit when a scan finds more than one Digirig-named input or output, or match on device properties an app cannot set. (/security, post-fix)
 
@@ -52,7 +52,7 @@ Carried, still present:
 - [NOTE] kx3rig/ft8/grid.py:14 — `isdigit()` then `int()`, the pattern fixed in cat.py.
 - [NOTE] kx3rig/controller.py:360-367 — `_abort_data_tx` cannot tell which transmission an idle-queued event belongs to (low confidence).
 - [NOTE] kx3rig/radio.py:232-234, 558-566, kx3rig/config.py:69-74, kx3rig/controller.py:83, 351-367 — Code quality items (redundant `_Pending` reset, duplicated tuning-field list, separate finite check, `_abort_data_tx` duplication).
-- [NOTE] README.md:73, docs/references.md:6, 22-24 — README's first-transmit dialog description is out of date; references.md cites private notes.
+- [NOTE] README.md:75, docs/references.md:6, 22-24 — README's first-transmit dialog description is out of date; references.md cites private notes.
 - [NOTE] kx3rig/radio.py:548-549 — The previous `swr` shows briefly at the start of the next transmission.
 - [NOTE] install.sh:31 — `Exec=` substituted unquoted; a path containing `|` breaks sed.
 - [NOTE] kx3rig/ft8/sequencer.py:90-105 — Answering a "73"-only decode reports success but leaves the sequencer idle.
@@ -60,7 +60,7 @@ Carried, still present:
 
 ### Fixes Applied
 
-- [WARN] kx3rig/devices.py:187, kx3rig/controller.py:388-395 — The scan's busy flag was a latch that only `on_done` released. `finished` caught only `GLib.Error` and `ValueError`, so a `RecursionError` from deeply nested `pw-dump` output (reproduced offline by /security) or a `MemoryError` skipped `on_done` and stopped audio discovery for the rest of the session. `finished` now catches `Exception`, logs it, and reports `None`. `_check_audio` clears the flag if starting a scan raises, so the next tick retries. New tests: `test_scan_reports_none_when_parsing_raises_other_errors` and `test_audio_scan_that_fails_to_start_retries`. /security re-ran the original trigger after the fix (nesting 10,007 and 100,000 deep): `None` within 0.03 s, and the next scan starts. (also claude-code, /security)
+None.
 
 ### Accepted Risks
 
@@ -68,6 +68,6 @@ Carried, still present:
   copyright line is deliberate open-source attribution.
 
 ---
-*Prior review (2026-10-11, commit 85228ff): refresh review of the cable-guide commit. Its one WARN (the jack drawing ignored text size) was fixed by /codefix and pushed as d70f14d; it left 24 NOTEs, no BLOCK or WARN open.*
+*Prior review (2026-10-11, commit ff6ea82, later split into dc44093 and 8a0d4ed and pushed): refresh review of the move from in-process GStreamer device discovery to an asynchronous `pw-dump` scan. /codefix fixed one WARN (an unexpected exception could latch the scan's busy flag and stop discovery); one WARN asked for the commit to be split, which was done; 32 NOTEs were left, all carried above. /security found no BLOCK or WARN.*
 
-<!-- REVIEW_META: {"date":"2026-10-11","commit":"ff6ea82","reviewed_up_to":"ff6ea825951f62a736bf134034d831500a20522c","base":"origin/main","tier":"refresh","block":0,"warn":1,"note":32} -->
+<!-- REVIEW_META: {"date":"2026-10-11","commit":"4067339","reviewed_up_to":"4067339d4036ad17ff1ef17eaa11c7ca23b71855","base":"origin/main","tier":"full","block":0,"warn":0,"note":33} -->
