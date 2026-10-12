@@ -17,6 +17,7 @@ from dataclasses import dataclass
 import numpy as np
 
 from .cat import Mode
+from .looptune.state import BANDWIDTH_HZ
 
 RATE = 12_000
 CHUNK = 256
@@ -70,11 +71,10 @@ def synth_cw(seconds: float, rate: int, freq: float = 700, amp: float = 0.03, wp
 
 # --- a band full of stations, heard through a magnetic loop ------------------------------
 
-# Approximate 2:1 SWR bandwidth of the AlexLoop per band (VE3WDM's indoor
-# measurements, docs/references.md). The demo uses it as the loop's -3 dB
-# receive bandwidth: good enough to make the band view's noise curve look right.
-LOOP_BANDWIDTH_HZ = {"40m": 10_000, "30m": 15_000, "20m": 35_000, "17m": 42_000,
-                     "15m": 50_000, "12m": 55_000, "10m": 60_000}
+# The AlexLoop's approximate 2:1 SWR bandwidth per band (looptune.state). The
+# demo uses it as the loop's -3 dB receive bandwidth: good enough to make the
+# band view's noise curve and the Loop Tune meter behave like the real thing.
+LOOP_BANDWIDTH_HZ = BANDWIDTH_HZ
 CW_PITCH = 600
 
 
@@ -119,28 +119,51 @@ def demo_stations() -> list[DemoStation]:
 
 
 class DemoLoop:
-    """Where the demo's magnetic loop is tuned: wherever the dial rests a while."""
+    """Where the demo's magnetic loop is tuned: wherever the dial rests a while,
+    or, while the Loop Tune guide turns its pretend knob, wherever that says."""
 
     REST_S = 8.0
+    MATCH_R = 1.3     # resistive mismatch at resonance: a good AlexLoop dips to about 1.3:1
 
     def __init__(self) -> None:
         self.tuned_hz = 0
+        self.manual = False
         self._dial = 0
         self._since = 0.0
 
-    def gain(self, dial: int, wall: float) -> float:
+    def _x(self, dial: int) -> float | None:
+        """Offset from resonance in half-bandwidths, or None off the loop's bands."""
         from . import bandplan
 
-        if dial != self._dial:
-            self._dial, self._since = dial, wall
-        elif wall - self._since > self.REST_S or not self.tuned_hz:
-            self.tuned_hz = dial
         band = bandplan.band_for(dial)
         bw = LOOP_BANDWIDTH_HZ.get(band.name if band else "", 0)
-        if not bw or bandplan.band_for(self.tuned_hz) is not band:
-            return 0.25 if bw else 1.0
-        x = 2 * (dial - self.tuned_hz) / bw
+        if not bw:
+            return None
+        if bandplan.band_for(self.tuned_hz) is not band:
+            return float("inf")
+        return 2 * (dial - self.tuned_hz) / bw
+
+    def gain(self, dial: int, wall: float) -> float:
+        if dial != self._dial:
+            self._dial, self._since = dial, wall
+        elif not self.manual and (wall - self._since > self.REST_S or not self.tuned_hz):
+            self.tuned_hz = dial
+        x = self._x(dial)
+        if x is None:
+            return 1.0
+        if x == float("inf"):
+            return 0.25
         return float(1 / np.sqrt(1 + x * x))
+
+    def swr(self, dial: int) -> float:
+        """A series-resonant load, z = R + jX, scaled so the 2:1 points sit
+        half a bandwidth either side (as VE3WDM measured)."""
+        x = self._x(dial)
+        if x is None or x == float("inf"):
+            return 15.0
+        z = complex(self.MATCH_R, x / np.sqrt(2) * 1.1)
+        gamma = abs((z - 1) / (z + 1))
+        return float(min(99.9, (1 + gamma) / (1 - gamma)))
 
 
 class DemoAudio:

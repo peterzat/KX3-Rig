@@ -123,6 +123,8 @@ class Station(GObject.Object):
             from .demo import DemoAudio
 
             self._demo_source = DemoAudio(self._on_samples, lambda: self.radio)
+            loop = self._demo_source.loop
+            self._fake.swr_source = lambda: loop.swr(self._fake.frequency)
             self._demo_source.start()
             self._set_audio(AudioStatus(rx=True, tx=True))
         else:

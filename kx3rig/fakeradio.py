@@ -33,6 +33,13 @@ class FakeKX3:
         self.powered = powered
         self.garbled = garbled
         self.cat_tx = False
+        # Front-panel TUNE (hold XMIT): a carrier at TUN PWR, or PWR if lower
+        # (OM p.14, p.41). Only demo mode and tests set it: KX3-Rig never sends
+        # the switch emulation that would.
+        self.tune = False
+        self.tune_power = 1.0
+        # Demo: a callable returning the SWR the antenna presents right now.
+        self.swr_source = None
         self.split = False
         self.xit_on = False
         self._rts = False
@@ -66,7 +73,7 @@ class FakeKX3:
 
     @property
     def transmitting(self) -> bool:
-        return self.powered and (self._rts or self.cat_tx)
+        return self.powered and (self._rts or self.cat_tx or self.tune)
 
     def write(self, data: bytes) -> int:
         with self._lock:
@@ -157,9 +164,13 @@ class FakeKX3:
         if cmd == "TQ":
             return f"TQ{1 if self.transmitting else 0};"
         if cmd == "PO":
-            return f"PO{int(self.power * 10) if self.transmitting else 0:03d};"
+            if not self.transmitting:
+                return "PO000;"
+            watts = min(self.power, self.tune_power) if self.tune and not self._rts else self.power
+            return f"PO{int(round(watts * 10)):03d};"
         if cmd == "SW":
-            return "SW013;"
+            swr = self.swr_source() if self.swr_source else 1.3
+            return f"SW{max(10, min(999, int(round(swr * 10)))):03d};"
         if cmd in ("K2", "K3", "AI"):
             return f"{cmd}{getattr(self, cmd.lower())};"
         if cmd[:2] in ("K2", "K3", "AI") and len(cmd) == 3:
