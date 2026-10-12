@@ -52,12 +52,14 @@ is to do something like this in a Claude Code CLI session with Opus 5.5 and xhig
 
 ```text
 Make a new project forking https://www.github.com/peterzat/KX3-Rig and matching the rig I run in
-FCC Grid CN87: a <large computer controllable transceiver>, with a <typical 100W amplifier for
+FCC Grid FN31: a <large computer controllable transceiver>, with a <typical 100W amplifier for
 that transceiver>, and a <suitable antenna setup>
 ```
 
-And you'd expect to one-shot a working solution. Why? Because the agentic pattern acts as a
-live and near [oracle-level](https://agent-hypervisor.ai/posts/bitter-lesson-of-agentic-coding/#what-i-think-is-durable)
+And you'd expect to one-shot a working solution. Why? Because this is an
+[agent-first repo](https://agent-hypervisor.ai/posts/agent-first-repos/#fork-and-customize): its
+end state, rules, and verification travel with the fork, so the agentic pattern acts as a live
+and near [oracle-level](https://agent-hypervisor.ai/posts/bitter-lesson-of-agentic-coding/#what-i-think-is-durable)
 spec for your own radio setup, even if it's quite different from my KX3.
 
 ## Make it yours
