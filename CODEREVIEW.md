@@ -1,6 +1,8 @@
-## Review — 2026-10-12 (commit: 1ebfe34)
+## Review — 2026-10-12 (commit: 0d1c5cf)
 
-**Summary:** Light review of the one unpushed commit on `main` against `origin/main`: 1ebfe34, a README-only change (36 insertions, 20 deletions) that ends the "Why this exists" section with an example Claude Code prompt for forking KX3-Rig to a different rig and moves the customizing, Smartscan and Loop Tune, and harness paragraphs into a new "Make it yours" section. `codereview-marker surface` is empty, so no tests, /security, or fix loop ran. Checked: every relative link and image target exists; the repo URL matches `origin`; the new `#what-i-think-is-durable` anchor resolves to the post's "What I Think Is Durable" heading (fetched this session); `xhigh` is a valid Claude Code effort level (`claude --help`); the only location detail is the 4-character grid CN87, which Accepted Risks covers; no secrets. The prior entry's commit-structure WARN no longer applies: those commits are on `origin/main`, outside the push set.
+**Summary:** Light review of the one unpushed commit on `main` against `origin/main`: 0d1c5cf, a docs-only change (README.md and docs/custom-shack.md, 9 insertions, 4 deletions). It links the "Agent-First Repos" post from the README's fork paragraph and from custom-shack.md's closing section, and changes the example fork prompt's grid from the station's own CN87 to FN31. `codereview-marker surface` is empty, so no tests, /security, external reviewers, built-in review, or fix loop ran. Checked: both new URLs return 200 (fetched this session); the `#fork-and-customize` anchor exists as an `<h2 id>` on the page; custom-shack.md's definition matches the post's TL;DR ("a codebase built for a coding agent to develop, operate, and use, with humans supplying intent and judgment"); the README's "end state, rules, and verification travel with the fork" matches the post's Fork and Customize section; FN31 is a valid US Maidenhead square (41-42 N, 72-74 W), not the station's; no secrets or new location detail.
+
+Resolved from the prior entry: the one-shot NOTE (README.md:59-61). The paragraph now cites the post's Fork and Customize section, which makes the same claim and reconciles it with the earlier post's one-shot ceiling: "From a blank prompt, that project sits well above the state-of-the-one-shot. From a fork, it sits comfortably inside it." The README's claim now matches its source. The grid half of the "FCC Grid" NOTE is also resolved (the prompt no longer hard-codes the station's square); the term half remains, below.
 
 **External reviewers:**
 Skipped (light review).
@@ -10,15 +12,19 @@ Skipped (light review).
 
 ### Findings
 
-[NOTE] README.md:59-61 — The paragraph says you would "expect to one-shot a working solution" because the repo acts as a "near oracle-level spec", and it links the cited post's "What I Think Is Durable" section. That post also has a section titled "The One-Shot Ceiling", which argues that complex projects cannot reliably be built in one pass ("the obstacle is architectural, not linguistic"). It defines an oracle as "a ground-truth reference, like Carlini's diff against the GCC torture suite", which is a verification tool, and it treats the spec as a separate idea. For a different transceiver, FakeKX3 is not ground truth; the new radio is. That radio cannot be checked inside the session, and CLAUDE.md requires hardware claims to come from sources or live checks. The "test it on your own equipment" caveat comes only in the next section, after a prompt for a 100 W setup. Confidence: medium (author's opinion about his own post; the tension with the cited text is factual).
-  Evidence: "And you'd expect to one-shot a working solution. Why? Because the agentic pattern acts as a live and near [oracle-level](...#what-i-think-is-durable) spec".
-  Suggested fix: Soften to a first working draft, or say what the one shot is expected to cover. Put the verification step (manuals, the emulator, then a dummy load with the operator present) in the same paragraph.
+[NOTE] README.md:50, 59-60 — The repo is now called two different things in consecutive paragraphs: "this agent-aware repo" (line 50, unchanged) and "an agent-first repo" (line 60, new, linked). The linked post uses "agent-aware" for data, not code ("Agent-aware data is complete, queryable, documented, and reachable"). It also says the author once considered "agent-aware codebase" as a name and chose "agent-first". A reader who follows the link meets the term for a different part of the pattern. Confidence: medium (the terms differ; whether line 50 should change is the author's call).
+  Evidence: line 50 `While this agent-aware repo is great for customizing setups similar to mine`; line 60 `[agent-first repo](https://agent-hypervisor.ai/posts/agent-first-repos/#fork-and-customize)`.
+  Suggested fix: Say "agent-first repo" on line 50 as well, or drop the adjective there.
 
-[NOTE] README.md:54-55 — The example prompt says "the rig I run in FCC Grid CN87". Grid squares are Maidenhead locators (an amateur-radio convention, as docs/smartscan.md:86 treats them), not an FCC designation. CN87 is the author's square, while the transceiver, amplifier, and antenna are `<placeholders>`, so a reader who copies the prompt asks for a fork located in Seattle. Confidence: high on the term; medium that the hard-coded grid is unintended.
-  Evidence: `FCC Grid CN87: a <large computer controllable transceiver>, ...`
-  Suggested fix: For example, "a US (FCC-licensed) station in grid square <your 4-character grid>", which keeps the band-plan hint that "FCC" may be meant to carry.
+[NOTE] README.md:54-55 (carried from the prior entry, term half only) — The prompt still says "FCC Grid FN31". Grid squares are Maidenhead locators (an amateur-radio convention, as docs/smartscan.md:86 treats them), not an FCC designation. The grid itself is no longer the station's own square. Confidence: high on the term.
+  Evidence: `FCC Grid FN31: a <large computer controllable transceiver>, ...`
+  Suggested fix: For example, "a US (FCC-licensed) station in grid square FN31", which keeps the band-plan hint that "FCC" may be meant to carry.
 
-Open NOTEs carried from the prior entry (code already on `origin/main`, outside this diff, not re-checked; see that entry in git history for full detail):
+[NOTE] README.md:54-55 and the linked post — The README links the post's Fork and Customize section, which quotes the prompt with "FCC Grid CN87". The README now says FN31. The post introduces it as "a prompt along these lines", so the difference is not an error. The commit's goal of a neutral grid only holds within the repo, though: a reader who follows the link sees the station's square in the quoted prompt. CN87 is published by the operator's decision (Accepted Risks), so this is not a disclosure issue. The post is outside this repo. Confidence: low that it matters.
+  Evidence: post text `matching the rig I run in FCC Grid CN87`; README line 55 `FCC Grid FN31`.
+  Suggested fix: None needed in the repo. Update the post's quoted prompt if the two should match.
+
+Open NOTEs carried from earlier entries (code already on `origin/main`, outside this diff, not re-checked; see the d664373 entry in git history for full detail):
 - [NOTE] kx3rig/ft8/engine.py:257-261 — The faded-station wait can expire while the decode of its last period is still running, so a reply heard in that period is dropped. (claude-code)
 - [NOTE] kx3rig/ft8/sequencer.py:221-234 — The "call" resume keeps the old stage and an old signal report. (claude-code)
 - [NOTE] kx3rig/keyboard/engine.py:200-202, 239-241; kx3rig/keyboard/psk31.py:242-251 — `_drain` copies `_browser.channels` without the lock while the audio thread sorts it. (claude-code)
@@ -40,7 +46,7 @@ Open NOTEs carried from the prior entry (code already on `origin/main`, outside 
 - [NOTE] docs/looptune.md:18-19, 101-102 — The "2 or 3 W" TUN PWR advice can trip the guide's 3.0 W warning.
 - [NOTE] docs/looptune.md:17-18 — "Let go" can read as releasing XMIT.
 - [NOTE] docs/custom-shack.md:105 — Says the guide "is tested", but `LoopTuneDialog` has no test.
-- [NOTE] README.md:204, docs/screenshots/confirm.png — confirm.png shows the old confirmation dialog.
+- [NOTE] README.md:206, docs/screenshots/confirm.png — confirm.png shows the old confirmation dialog.
 
 The /security NOTEs are detailed in SECURITY.md (0 BLOCK, 0 WARN, 14 NOTE as of d664373). No code changed since that scan.
 
@@ -57,6 +63,6 @@ None.
   (2026-10-12). Anything more precise, such as a 6-character subsquare, stays out of the repo.
 
 ---
-*Prior review (2026-10-12, commit d664373): full review of seven feature commits (SWR guard, FT8 wait, FT4, filters, Keyboard and WSPR views). It ended at 0 BLOCK, 1 WARN, 22 NOTE after /codefix made Tune Radio in the Keyboard and WSPR views refuse during an FT8 contact (committed as 68b0d90). The remaining WARN, commit structure, became moot when those commits were pushed.*
+*Prior review (2026-10-12, commit 1ebfe34): light review of the README fork prompt and the new "Make it yours" section. It ended at 0 BLOCK, 0 WARN, 2 new NOTEs (the one-shot claim against the cited post, and "FCC Grid CN87" as a term and a hard-coded grid), with 22 open NOTEs carried from d664373. This commit resolves the one-shot NOTE and the grid half of the other.*
 
-<!-- REVIEW_META: {"date":"2026-10-12","commit":"1ebfe34","reviewed_up_to":"1ebfe34975d3434fcfb44fa603c8aa08021cb9a9","base":"origin/main","tier":"light","block":0,"warn":0,"note":24} -->
+<!-- REVIEW_META: {"date":"2026-10-12","commit":"0d1c5cf","reviewed_up_to":"0d1c5cff87adef73d09fc3ee1287d5e6bd4060d4","base":"origin/main","tier":"light","block":0,"warn":0,"note":25} -->
