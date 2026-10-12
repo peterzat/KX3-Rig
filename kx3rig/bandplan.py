@@ -187,14 +187,20 @@ def tx_check(
     license_class: str = "General",
     audio_low: int | None = None,
     audio_high: int | None = None,
+    kind: str | None = None,
 ) -> TxCheck:
-    """May this station transmit here, in this mode? Returns a friendly reason if not."""
+    """May this station transmit here, in this mode? Returns a friendly reason if not.
+
+    kind overrides the emission the mode implies. Software CW is a keyed tone
+    sent in DATA mode: emission J2A, which 97.3(c)(1) counts as CW, so it is
+    checked as CW over the RF span the tone occupies.
+    """
     band = band_for(dial)
     if band is None:
         return TxCheck(False, f"{_mhz(dial)} MHz is outside the amateur bands.")
     if band.name == "60m":
         return TxCheck(False, "Transmitting on 60 m isn't supported yet. Its channel rules need special handling.")
-    kind = emission_kind(mode)
+    kind = kind or emission_kind(mode)
     if mode is Mode.FM and dial < FM_MIN_HZ:
         return TxCheck(False, "FM transmit is only allowed from 29.0 MHz up (10 m FM and 6 m).")
     low, high = occupied(dial, mode, audio_low, audio_high)

@@ -93,3 +93,13 @@ def test_privilege_segments_for_band():
 def test_unknown_license_class_is_most_restrictive():
     assert not tx_check(14_074_000, Mode.DATA, "Wizard", 1500, 1550).allowed
     assert tx_check(28_074_000, Mode.DATA, "Wizard", 1500, 1550).allowed
+
+
+def test_software_cw_is_checked_as_cw():
+    from kx3rig.bandplan import CW, tx_check
+    from kx3rig.cat import Mode
+
+    # A 700 Hz keyed tone in DATA on 14.2593: CW (J2A) is fine in the phone segment ...
+    assert tx_check(14_259_300, Mode.DATA, "General", 650, 750, kind=CW).allowed
+    # ... where a data signal is not.
+    assert not tx_check(14_259_300, Mode.DATA, "General", 650, 750).allowed

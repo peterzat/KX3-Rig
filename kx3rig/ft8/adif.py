@@ -16,8 +16,8 @@ from .. import __version__
 class LogEntry:
     call: str
     grid: str
-    rst_sent: int | None
-    rst_rcvd: int | None
+    rst_sent: int | str | None      # FT8 report in dB, or an RST such as "599"
+    rst_rcvd: int | str | None
     time_on: datetime
     time_off: datetime
     band: str            # "20m"
@@ -26,6 +26,9 @@ class LogEntry:
     my_grid: str
     tx_power_w: float | None = None
     mode: str = "FT8"
+    submode: str = ""    # ADIF puts FT4 under MFSK and PSK31 under PSK
+    name: str = ""
+    comment: str = ""
 
 
 def _field(name: str, value) -> str:
@@ -33,7 +36,9 @@ def _field(name: str, value) -> str:
     return f"<{name}:{len(text)}>{text} "
 
 
-def _report(value: int | None) -> str:
+def _report(value: int | str | None) -> str:
+    if isinstance(value, str):
+        return value.strip()
     return "" if value is None else f"{value:+03d}"
 
 
@@ -44,6 +49,7 @@ def record(e: LogEntry) -> str:
         _field("call", e.call),
         _field("gridsquare", e.grid) if e.grid else "",
         _field("mode", e.mode),
+        _field("submode", e.submode) if e.submode else "",
         _field("rst_sent", _report(e.rst_sent)) if e.rst_sent is not None else "",
         _field("rst_rcvd", _report(e.rst_rcvd)) if e.rst_rcvd is not None else "",
         _field("qso_date", on.strftime("%Y%m%d")),
@@ -55,6 +61,8 @@ def record(e: LogEntry) -> str:
         _field("station_callsign", e.station_call),
         _field("my_gridsquare", e.my_grid) if e.my_grid else "",
         _field("tx_pwr", f"{e.tx_power_w:g}") if e.tx_power_w else "",
+        _field("name", e.name) if e.name else "",
+        _field("comment", e.comment) if e.comment else "",
     ]
     return "".join(p for p in parts if p) + "<eor>\n"
 
@@ -78,6 +86,26 @@ def append(path: str, entry: LogEntry) -> None:
         if new:
             f.write(header())
         f.write(record(entry))
+
+
+def worked(path: str) -> set[tuple[str, str]]:
+    """(CALL, band) for every contact in the log, for marking stations not worked before."""
+    import re
+
+    try:
+        with open(path, encoding="utf-8") as f:
+            text = f.read()
+    except OSError:
+        return set()
+    out = set()
+    for rec in text.split("<eor>")[:-1] if "<eor>" in text else []:
+        call = re.search(r"<call:(\d+)>", rec, re.I)
+        band = re.search(r"<band:(\d+)>", rec, re.I)
+        if call:
+            c = rec[call.end():call.end() + int(call.group(1))].upper()
+            b = rec[band.end():band.end() + int(band.group(1))].lower() if band else ""
+            out.add((c, b))
+    return out
 
 
 def count(path: str) -> int:

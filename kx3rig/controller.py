@@ -242,7 +242,7 @@ class Station(GObject.Object):
     # --- transmit policy -----------------------------------------------------------------
 
     def can_transmit(self, mode: Mode | None = None, audio_low: int | None = None,
-                     audio_high: int | None = None) -> TxCheck:
+                     audio_high: int | None = None, kind: str | None = None) -> TxCheck:
         if not self.connected:
             return TxCheck(False, "The radio isn't connected.")
         if self.scanning:
@@ -263,7 +263,8 @@ class Station(GObject.Object):
         if self.radio.split or self.radio.xit_on:
             # The license check only sees VFO A; SPLIT or XIT would transmit elsewhere.
             return TxCheck(False, "Turn off SPLIT and XIT on the KX3 to transmit.")
-        return bandplan.tx_check(self.radio.frequency, mode, self.settings.license_class, audio_low, audio_high)
+        return bandplan.tx_check(self.radio.frequency, mode, self.settings.license_class, audio_low, audio_high,
+                                 kind)
 
     def voice_check(self) -> TxCheck:
         mode = self.radio.mode
