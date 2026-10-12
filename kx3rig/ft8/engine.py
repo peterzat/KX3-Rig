@@ -222,6 +222,12 @@ class Ft8Engine(GObject.Object):
         now = time.time()
         slot = slot_of(now)
         t_in = now - slot_start(slot)
+        seq = self.sequencer
+        if seq.wait_expired(slot):
+            who = seq.contact.call if seq.contact else "anyone"
+            seq.halt()
+            self.emit("event", "gave-up", f"{who} didn't come back. Stopped waiting.")
+            self.emit("contact-changed")
         if t_in >= DECODE_AT_S and self._last_decode_slot != slot:
             self._last_decode_slot = slot
             if self.listening and slot not in self._tx_slots and self._decoding_slot is None:
@@ -266,6 +272,15 @@ class Ft8Engine(GObject.Object):
             del self.decodes[old]
         self.emit("decoded", slot, decodes)
         seq = self.sequencer
+        if seq.waiting:
+            # Waiting for a faded station: listen in both periods.
+            who = seq.contact.call if seq.contact else ""
+            how = seq.on_waiting_decodes([d for d in decodes if not d.low_confidence])
+            if how:
+                self.emit("event", "resumed", f"{who} is back. Resuming the contact."
+                          if how == "reply" else f"{who} is calling again. Answering.")
+                self.emit("contact-changed")
+            return False
         if seq.active and (slot % 2 == 0) != seq.tx_even:
             before = (seq.stage, seq.contact.call if seq.contact else "")
             seq.on_decodes([d for d in decodes if not d.low_confidence])
@@ -367,8 +382,12 @@ class Ft8Engine(GObject.Object):
             self._finish_contact()
         elif seq.should_give_up():
             who = seq.contact.call if seq.contact else "anyone"
-            seq.halt()
-            self.emit("event", "gave-up", f"No answer from {who}. Stopped transmitting.")
+            if seq.can_wait():
+                seq.start_waiting(slot_of(time.time()))
+                self.emit("event", "waiting", f"No answer from {who}. Waiting in case they come back.")
+            else:
+                seq.halt()
+                self.emit("event", "gave-up", f"No answer from {who}. Stopped transmitting.")
         self.emit("contact-changed")
 
     def _log_contact(self) -> None:

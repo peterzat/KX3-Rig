@@ -204,6 +204,12 @@ class MainWindow(Adw.ApplicationWindow):
             self.toast("Connected to the KX3")
         elif kind in ("watchdog", "error", "garbled"):
             self.toast(message)
+        elif kind == "swr":
+            if self.looptune is not None:
+                self.looptune.forget_tuning()
+                self.toast_action(message, "Tune Loop", self.open_loop_tune)
+            else:
+                self.toast(message)
 
     def _on_radio(self, st) -> None:
         connected = st.link is Link.CONNECTED

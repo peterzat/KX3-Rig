@@ -14,6 +14,14 @@ Our messages:
     Tx6  CQ ME GRID       call CQ
 
 The contact is logged when we first send RR73 or 73, as WSJT-X does.
+
+Keeping a fading contact alive (after WSJT-X Improved's "Wait and Reply" and
+"Wait and Call", by DG2YCB, https://wsjt-x-improved.sourceforge.io): when a
+contact runs out of repeats, the sequencer stops transmitting and waits up to
+WAIT_PERIODS for the other station. If they answer us, the contact picks up
+where they are. If they are heard calling CQ or signing off with someone else,
+we call them again, up to RECALLS more times. Only a contact the operator
+started is ever resumed; Stop ends the wait.
 """
 
 from __future__ import annotations
@@ -26,6 +34,9 @@ from .messages import Message, format_report, same_call
 
 MAX_REPEATS = 5        # same message without progress, then give up
 MAX_CQ = 8             # CQ calls without an answer, then stop
+WAIT_PERIODS = 16      # how long a faded contact waits for the other station (4 min of FT8)
+MAX_WAITS = 2          # waits per contact
+RECALLS = 3            # transmissions after the other station reappears
 
 
 class Stage(enum.Enum):
@@ -79,6 +90,8 @@ class Sequencer:
     history: list[tuple[datetime, str]] = field(default_factory=list)
     _rr73_sent: bool = False
     _resend_rr73: bool = False
+    wait_until: int | None = None  # last period of a wait, while waiting for the other station
+    waits: int = 0
 
     # --- operator actions -----------------------------------------------------------
 
@@ -110,6 +123,8 @@ class Sequencer:
     # --- what to send --------------------------------------------------------------------
 
     def next_message(self) -> str | None:
+        if self.waiting:
+            return None
         me, grid = self.my_call, self.my_grid4
         c = self.contact
         if self.stage is Stage.CALLING_CQ:
@@ -162,13 +177,61 @@ class Sequencer:
 
     def should_give_up(self) -> bool:
         limit = MAX_CQ if self.stage is Stage.CALLING_CQ else MAX_REPEATS
-        return self.active and self.repeats >= limit
+        return self.active and not self.waiting and self.repeats >= limit
+
+    # --- waiting for a faded station -------------------------------------------------------
+
+    @property
+    def waiting(self) -> bool:
+        return self.wait_until is not None
+
+    def can_wait(self) -> bool:
+        """A contact in progress (not a CQ, not already signing off) that has waits left."""
+        return (self.contact is not None and self.waits < MAX_WAITS
+                and self.stage in (Stage.ANSWERING, Stage.REPORT, Stage.ROGER_REPORT))
+
+    def start_waiting(self, slot: int, periods: int = WAIT_PERIODS) -> None:
+        self.waits += 1
+        self.wait_until = slot + periods
+
+    def wait_expired(self, slot: int) -> bool:
+        return self.wait_until is not None and slot > self.wait_until
+
+    def on_waiting_decodes(self, decodes: list[Decode]) -> str:
+        """Every period's decodes while waiting. Returns "reply" when they answered
+        us, "call" when they are free again (CQ or a sign-off to someone else), or ""."""
+        if not self.waiting or self.contact is None:
+            return ""
+        c = self.contact
+        theirs = [d for d in decodes if same_call(d.message.de, c.call)]
+        if not theirs:
+            return ""
+        to_me = [d for d in theirs if d.message.addressed_to(self.my_call)]
+        if to_me:
+            d = to_me[-1]
+            self._resume(d)
+            self._advance_from(d.message, d)
+            return "reply"
+        free = [d for d in theirs if d.message.is_cq or d.message.rrr or d.message.rr73
+                or d.message.seventy_three]
+        if free:
+            d = free[-1]
+            self._resume(d)
+            self.repeats = MAX_REPEATS - RECALLS
+            return "call"
+        return ""
+
+    def _resume(self, d: Decode) -> None:
+        self.wait_until = None
+        self.repeats = 0
+        self.tx_even = not d.even
+        self.contact.their_freq = d.freq
 
     # --- receiving -----------------------------------------------------------------------
 
     def on_decodes(self, decodes: list[Decode]) -> None:
         """Process one period's decodes (from the period we were listening in)."""
-        if not self.active:
+        if not self.active or self.waiting:
             return
         to_me = [d for d in decodes if d.message.addressed_to(self.my_call)]
         if self.stage is Stage.CALLING_CQ:
@@ -233,3 +296,5 @@ class Sequencer:
         self.history = []
         self._rr73_sent = False
         self._resend_rr73 = False
+        self.wait_until = None
+        self.waits = 0

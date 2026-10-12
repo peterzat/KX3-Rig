@@ -184,3 +184,10 @@ def test_advice_catches_up_when_smartscan_stops_without_a_new_reading(station, t
         assert tuner.need_for(station.radio.frequency).level == RETUNE
     finally:
         scan.stop(restore=False)
+
+
+def test_forget_tuning_asks_for_a_retune(station, tuner):
+    _tune(station, 14_285_000)
+    tuner.mark_tuned()
+    tuner.forget_tuning()
+    assert tuner.tuned_hz == 0 and tuner.need.level == RETUNE

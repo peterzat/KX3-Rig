@@ -165,3 +165,62 @@ def test_engine_ignores_completion_from_a_replaced_sequencer(tmp_path, monkeypat
     assert not logged
     assert new.stage is Stage.ROGERS
     assert new.next_message() == "N0XYZ K1ABC RR73"
+
+
+def _fade(s):
+    """Send until the sequencer runs out of repeats with no reply."""
+    while not s.should_give_up():
+        run_tx(s)
+        s.on_decodes([])
+
+
+def test_a_faded_contact_waits_then_resumes_when_they_answer():
+    s = Sequencer(ME, GRID)
+    s.answer(dec("CQ W1AW FN31", slot=100))
+    run_tx(s)
+    s.on_decodes([dec("K1ABC W1AW -12")])
+    assert s.stage is Stage.ROGER_REPORT
+    _fade(s)
+    assert s.can_wait()
+    s.start_waiting(slot=120)
+    assert s.waiting and s.active and s.next_message() is None
+    assert s.on_waiting_decodes([dec("CQ K9XYZ EN52", slot=121)]) == ""
+    # They come back in the other parity, still asking for our roger.
+    assert s.on_waiting_decodes([dec("K1ABC W1AW -12", slot=123)]) == "reply"
+    assert not s.waiting and s.tx_even is True
+    assert s.next_message() == "W1AW K1ABC R-10"
+
+
+def test_a_faded_station_calling_cq_gets_a_few_more_calls():
+    s = Sequencer(ME, GRID)
+    s.answer(dec("CQ W1AW FN31", slot=100))
+    _fade(s)
+    s.start_waiting(slot=110)
+    assert s.on_waiting_decodes([dec("CQ W1AW FN31", slot=112)]) == "call"
+    assert s.stage is Stage.ANSWERING and s.next_message() == "W1AW K1ABC FN42"
+    sends = 0
+    while not s.should_give_up():
+        run_tx(s)
+        s.on_decodes([])
+        sends += 1
+    assert sends == 3
+
+
+def test_waiting_expires_and_is_limited():
+    s = Sequencer(ME, GRID)
+    s.answer(dec("CQ W1AW FN31", slot=100))
+    _fade(s)
+    s.start_waiting(slot=110, periods=4)
+    assert not s.wait_expired(114) and s.wait_expired(115)
+    s.wait_until = None
+    s.start_waiting(slot=120)
+    s.wait_until = None
+    assert not s.can_wait()          # two waits per contact
+    s.halt()
+    assert not s.waiting and s.waits == 0
+
+
+def test_cq_and_signoff_never_wait():
+    s = Sequencer(ME, GRID)
+    s.call_cq(tx_even=True)
+    assert not s.can_wait()

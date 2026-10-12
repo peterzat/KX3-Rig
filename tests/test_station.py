@@ -516,3 +516,22 @@ def test_transmitting_stops_a_clip_and_refuses_a_new_one(station, monkeypatch, c
         assert clip_player[2].stopped
     finally:
         station._fake.tune = False
+
+
+def test_high_swr_stops_our_transmission(station):
+    events, done = [], []
+    station.connect("event", lambda s, kind, msg: events.append(kind))
+    station._fake.swr_source = lambda: 3.1          # the loop has drifted far off resonance
+    assert station.play_data(np.zeros(48_000 * 8, np.float32), 48_000, on_done=done.append).allowed
+    assert pump(lambda: "swr" in events, timeout=5)
+    assert done == [False] and not station.data_transmitting
+    assert pump(lambda: not station.radio.ptt)
+
+
+def test_good_swr_lets_the_transmission_finish(station):
+    events, done = [], []
+    station.connect("event", lambda s, kind, msg: events.append(kind))
+    station._fake.swr_source = lambda: 1.4
+    assert station.play_data(np.zeros(48_000 * 2, np.float32), 48_000, on_done=done.append).allowed
+    assert pump(lambda: done, timeout=5)
+    assert done == [True] and "swr" not in events

@@ -32,6 +32,12 @@ log = logging.getLogger(__name__)
 
 VOICE_TX_LIMIT_S = 120.0
 TUNE_LIMIT_S = 10.0
+# Transmit SWR guard (after WSJT-X Improved's SWR stop, by DG2YCB): stop our own
+# transmission when the KX3 reports SWR above this on two polls in a row. A
+# magnetic loop that drifts off resonance is the usual cause. Needs KX3 firmware
+# 2.93 or later, which added SW (docs/references.md).
+SWR_STOP = 2.5
+SWR_STOP_AFTER_MS = 900   # still high this long after the first high reading (two TX polls)
 
 
 class AudioStatus:
@@ -91,6 +97,7 @@ class Station(GObject.Object):
         # nothing may key the radio until the sweep stops.
         self.scanning = False
         self._clip = None
+        self._swr_check = 0
 
         if demo:
             from .fakeradio import FakeKX3
@@ -154,9 +161,34 @@ class Station(GObject.Object):
             self.stop_clip()   # a replayed clip must never reach the microphone on the air
         if was_tx != is_tx:
             self._apply_listen()
+        self._guard_swr(state)
         if state.link is not Link.CONNECTED and self.talking:
             self.stop_talking()
         self.emit("radio-changed", state)
+        return False
+
+    def _guard_swr(self, state: RadioState) -> None:
+        """Stop a transmission KX3-Rig keyed when the SWR stays high. The operator's
+        own TUNE (Loop Tune) is theirs to stop, so it is left alone."""
+        if self._swr_check or not self._swr_high(state):
+            return
+        # The radio reports only changes, so look again shortly instead of counting polls.
+        self._swr_check = GLib.timeout_add(SWR_STOP_AFTER_MS, self._recheck_swr)
+
+    def _swr_high(self, state: RadioState) -> bool:
+        ours = self.talking or self.data_transmitting
+        return ours and state.swr is not None and state.swr > SWR_STOP
+
+    def _recheck_swr(self) -> bool:
+        self._swr_check = 0
+        if not self._swr_high(self.radio):
+            return False
+        swr = self.radio.swr
+        self.stop_talking()
+        self._abort_data_tx()
+        self.link.ptt(False)
+        self.emit("event", "swr", f"SWR rose to {swr:.1f}:1, so KX3-Rig stopped transmitting. "
+                                  "Retune the loop before trying again.")
         return False
 
     def _emit_event(self, kind: str, message: str) -> bool:

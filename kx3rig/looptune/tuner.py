@@ -102,6 +102,12 @@ class LoopTuner(GObject.Object):
         self._refresh_need()
         self.emit("need-changed")
 
+    def forget_tuning(self) -> None:
+        """The loop is no longer tuned (for example the SWR guard stopped a transmission)."""
+        self.tuned_hz = 0
+        self._refresh_need()
+        self.emit("need-changed")
+
     # --- receive-noise meter ---------------------------------------------------------------
 
     def start_meter(self) -> None:

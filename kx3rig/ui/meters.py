@@ -76,6 +76,8 @@ class SignalMeter(Gtk.Box):
         if self._tx:
             self._tx = False
             self.bar.remove_css_class("tx")
+            self.value.remove_css_class("warning")
+            self.value.remove_css_class("error")
             self.caption.set_label("Signal")
             self._set_scale(["1", "3", "5", "7", "9", "+20", "+40", "+60"])
         self._target = smeter_fraction(db_over_s9)
@@ -95,6 +97,13 @@ class SignalMeter(Gtk.Box):
         if swr is not None:
             parts.append(f"SWR {swr:.1f}")
         self.value.set_label("  ·  ".join(parts) or "Transmitting")
+        # Yellow above 1.5:1, red above 2:1 (the loop needs a touch-up, then a retune).
+        for cls in ("warning", "error"):
+            self.value.remove_css_class(cls)
+        if swr is not None and swr > 2.0:
+            self.value.add_css_class("error")
+        elif swr is not None and swr > 1.5:
+            self.value.add_css_class("warning")
 
     def _animate(self) -> bool:
         now = time.monotonic()
