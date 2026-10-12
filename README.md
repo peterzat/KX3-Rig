@@ -14,9 +14,10 @@ It is built for one station today: an Elecraft KX3 connected to an Ubuntu laptop
 
 ## Why this exists
 
-KX3-Rig is based on WSJT-X, Hamlib 4.5.5, and other existing tools. It doesn't do anything new;
-it is just very customized to one station and one operator's UI opinions: an Elecraft KX3, a
-Digirig, and an AlexLoop antenna.
+KX3-Rig is based on WSJT-X, WSJT-X Improved, Hamlib 4.5.5, fldigi, Elecraft's documentation, and
+other existing tools and sources, listed under "What KX3-Rig reuses" below. It doesn't do
+anything new; it is just very customized to one station and one operator's UI opinions: an
+Elecraft KX3, a Digirig, and an AlexLoop antenna.
 
 Anyone can use or fork this repo, and with gear like this it should work out of the box. Where
 it shines is as a starting point for **agentic coding**. The repo carries the reference material
@@ -46,7 +47,8 @@ intent. It also means a polished, professional-looking app can exist for an audi
 really custom ham shack, and anyone can have their own. How Smartscan and Loop Tune were built
 is in [docs/custom-shack.md](docs/custom-shack.md).
 
-What KX3-Rig reuses:
+What KX3-Rig reuses (kept current: each new source a feature borrows from is added here, and
+cited in [docs/references.md](docs/references.md)):
 
 - **WSJT-X**: its `jt9` decoder and `ft8code` encoder run as programs. The FT8 waveform, dial
   frequencies, and contact sequencing and logging rules follow its source and User Guide.

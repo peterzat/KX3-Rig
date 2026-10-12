@@ -14,6 +14,11 @@ session (docs/references.md, the manuals it cites) or a live check on the radio.
 from-memory claims were wrong in the earlier bring-up project. When something is verified live,
 record it in docs/references.md.
 
+**Credit what is borrowed.** Whenever a feature borrows from a new source (a program, a spec, a
+manual, someone's published notes), add it to the README's opening "based on" sentence and its
+"What KX3-Rig reuses" list, to Credits when it is a person's or project's work, and cite it in
+docs/references.md.
+
 **Sudo and system-wide changes are the operator's.** Propose the exact command; never run
 `sudo` or change packages, groups, systemd units, or udev rules.
 
