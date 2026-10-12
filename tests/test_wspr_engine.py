@@ -112,6 +112,29 @@ def test_spots_get_distance_and_upload_fields(station, eng):
     assert all(len(f["rgrid"]) == 4 for f in forms)
 
 
+def test_upload_uses_the_dial_the_slot_was_recorded_on(station, eng, monkeypatch):
+    from kx3rig.wspr import engine as wspr_engine
+
+    started = []
+
+    class FakeThread:
+        def __init__(self, target=None, args=(), **kw):
+            started.append(args)
+
+        def start(self):
+            pass
+
+    monkeypatch.setattr(wspr_engine.threading, "Thread", FakeThread)   # nothing goes online
+    eng.demo = False
+    eng.settings.wspr_upload = True
+    _on_wspr(station)
+    station.go_dial(wspr.DIALS["40m"])            # the operator retunes while wsprd runs
+    assert pump(lambda: station.radio.frequency == wspr.DIALS["40m"])
+    spot = wspr.Spot("1200", -10, 0.0, 14_097_100, 0, "JA1WSP PM95 37", "JA1WSP", "PM95", 37)
+    eng._on_spots(500, "20m", [spot], wspr.DIALS["20m"])
+    assert started and started[0][2] == wspr.DIALS["20m"]
+
+
 def test_our_own_call_is_not_listed(station, eng):
     eng._on_spots(1, "20m", [wspr.Spot("1200", -10, 0.0, 14_097_100, 0, "K1ABC FN42 30", "K1ABC", "FN42", 30)])
     assert eng.heard == []
@@ -138,3 +161,17 @@ def test_one_self_keying_activity_at_a_time(station, eng, tmp_path):
     assert "WSPR beacon" in kb.check_tx("hello").reason
     eng.stop_beacon()
     assert "WSPR beacon" not in kb.check_tx("hello").reason
+
+
+def test_beacon_stops_when_the_band_changes(station, eng, monkeypatch):
+    _on_wspr(station)
+    assert eng.start_beacon(30).allowed
+    events = []
+    eng.connect("event", lambda e, kind, msg: events.append((kind, msg)))
+    station.go_dial(wspr.DIALS["40m"])
+    assert pump(lambda: station.radio.frequency == wspr.DIALS["40m"] and not station.link.tuning_pending)
+    monkeypatch.setattr(eng.scheduler, "transmit_in", lambda slot: True)
+    slot = wspr.slot_of(time.time()) + 1
+    eng._maybe_transmit(slot * 120 + 0.7, slot, 0.7)
+    assert not eng.transmitting and not station.data_transmitting and not eng.beacon_on
+    assert events and "band changed" in events[-1][1]

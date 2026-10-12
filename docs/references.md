@@ -341,7 +341,9 @@ PSK31 (G3PLX, FL):
   shown as `I`'s code, `Z` as `Y`'s). Characters are separated by "00", and no code contains
   "00".
 - Dials (FL rigsupport.cxx:313-328, signals about 1 kHz up): 1.807, 3.580, 7.070, 10.135,
-  14.070, 18.100, 21.070, 24.920, 28.120 MHz. OM p.18 also suggests 14.070-14.073.
+  14.070, 18.100, 21.070, 24.920, 28.120 MHz. OM p.18 also suggests 14.070-14.073. KX3-Rig
+  leaves out 18.100 and 24.920: 1 kHz up from them is inside the FT8 window on 17 m and the FT4
+  window on 12 m (bandplan.py, ft8/ft4.py). No other cited 17 or 12 m PSK31 dial yet.
 
 CW:
 - Morse codes and spacing: ITU-R M.1677-1 sec. 1-2; codes as in FL morse.cxx. The decoder follows

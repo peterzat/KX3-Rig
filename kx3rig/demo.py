@@ -259,10 +259,15 @@ class DemoAudio:
     @staticmethod
     def _keyboard_kind(dial: int) -> str:
         from . import bandplan
+        from .ft8.protocol import PROTOCOLS
         from .keyboard.engine import CW, PSK31, dial_for
+        from .wspr.protocol import DIALS as WSPR_DIALS
 
         band = bandplan.band_for(dial)
         if band is None:
+            return ""
+        others = [p.dial(band) for p in PROTOCOLS.values()] + [WSPR_DIALS.get(band.name)]
+        if any(d is not None and abs(dial - d) < 500 for d in others):
             return ""
         for kind in (PSK31, CW):
             d = dial_for(kind, band)

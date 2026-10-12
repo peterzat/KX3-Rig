@@ -25,8 +25,8 @@ from ..ft8 import grid as grids  # noqa: E402
 from ..ft8.engine import Ft8Engine  # noqa: E402
 from ..ft8.filters import DecodeFilter  # noqa: E402
 from ..ft8.messages import base_call  # noqa: E402
-from ..ft8.protocol import FT4, FT8  # noqa: E402
-from ..ft8.sequencer import Decode, Stage  # noqa: E402
+from ..ft8.protocol import FT4, FT8, follow_dial  # noqa: E402
+from ..ft8.sequencer import Decode, Stage, answerable  # noqa: E402
 from ..radio import Link  # noqa: E402
 from .waterfall import FrequencyAxis, Waterfall  # noqa: E402
 
@@ -78,7 +78,7 @@ class DecodeRow(Gtk.ListBoxRow):
             box.append(_label(where, "caption", "numeric", "dim-label", valign=Gtk.Align.CENTER))
         if d.low_confidence:
             box.append(_label("?", "dim-label", tooltip_text="Low-confidence decode"))
-        self.can_answer = bool(msg.de and msg.de != "<...>" and (msg.is_cq or to_me))
+        self.can_answer = answerable(d, my_call)
         if self.can_answer:
             btn = Gtk.Button(icon_name="mail-reply-sender-symbolic", valign=Gtk.Align.CENTER)
             btn.add_css_class("flat")
@@ -223,7 +223,8 @@ class Ft8Page(Gtk.Box):
         self.waterfall.marker_width_hz = 50
         self.waterfall.describe_offset = lambda hz: f"{hz:.0f} Hz  ·  click to transmit here"
         self.waterfall.connect("offset-clicked", lambda w, hz, shift: self._set_offset(hz))
-        self.waterfall.connect("label-activated", lambda w, d: getattr(d, "message", None) and self._answer(d))
+        self.waterfall.connect("label-activated", lambda w, d: getattr(d, "message", None)
+                               and answerable(d, self.station.settings.callsign) and self._answer(d))
         axis = FrequencyAxis(self.waterfall)
         axis.labeler = lambda hz: f"{hz:.0f}"
         wf_box.append(self.waterfall)
@@ -371,6 +372,7 @@ class Ft8Page(Gtk.Box):
     def _on_mode_toggled(self, button, name: str) -> None:
         if not button.get_active() or self.engine.proto.name == name:
             return
+        was_on = self.engine.on_ft8_frequency()
         if not self.engine.set_protocol(name):
             self.toast("Stop the current contact before switching between FT8 and FT4")
             self.mode_buttons[self.engine.proto.name].set_active(True)
@@ -381,7 +383,7 @@ class Ft8Page(Gtk.Box):
         if callable(self.on_title):
             self.on_title(name)
         # Follow onto the new mode's dial when the radio was on the old one.
-        if self.station.connected and bandplan.band_for(self.station.radio.frequency):
+        if self.station.connected and follow_dial(was_on, self.engine.proto) is not None:
             self._tune_to_ft8()
         self._refresh_setup()
 

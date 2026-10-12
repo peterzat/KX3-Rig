@@ -98,6 +98,7 @@ class WsprEngine(GObject.Object):
         self.workdir = os.path.join(config.data_dir(), "wsprd")
         self.heard: list[Heard] = []
         self.beacon_until: float | None = None        # wall time the beacon ends
+        self.beacon_band: str | None = None           # the band it was started on
         self.percent = 20
         self.scheduler = wspr.TxScheduler(self.percent)
         self.transmitting = False
@@ -168,6 +169,8 @@ class WsprEngine(GObject.Object):
             return bandplan.TxCheck(False, other)
         if self.band is None:
             return bandplan.TxCheck(False, "Tune the radio to a WSPR frequency first. Tune Radio does this.")
+        if self.beacon_on and self.beacon_band and self.band.name != self.beacon_band:
+            return bandplan.TxCheck(False, f"The band changed. Start the beacon again on {self.band.label}.")
         if st.data_submode is not DataSubmode.DATA_A:
             return bandplan.TxCheck(False, "Set the KX3's data submode to DATA A. Tune Radio does this.")
         dbm = self.dbm()
@@ -187,6 +190,7 @@ class WsprEngine(GObject.Object):
         if percent is not None:
             self.set_percent(percent)
         self.beacon_until = time.time() + minutes * 60
+        self.beacon_band = self.band.name
         self.emit("changed")
         return check
 
@@ -198,6 +202,7 @@ class WsprEngine(GObject.Object):
     def stop_beacon(self) -> None:
         was = self.busy
         self.beacon_until = None
+        self.beacon_band = None
         if self.transmitting:
             self.station.stop_data_tx()
             self.transmitting = False
@@ -213,6 +218,7 @@ class WsprEngine(GObject.Object):
         t_in = now - slot * wspr.PERIOD
         if self.beacon_on and now > self.beacon_until and not self.transmitting:
             self.beacon_until = None
+            self.beacon_band = None
             self.emit("event", "done", "The WSPR beacon finished.")
             self.emit("changed")
         if t_in >= DECODE_AT_S and self._last_decode_slot != slot:
@@ -273,7 +279,7 @@ class WsprEngine(GObject.Object):
         dial = self.station.radio.frequency
         if not wsprd_available():
             if self.demo:
-                GLib.idle_add(self._on_spots, slot, band.name if band else "", self._demo_spots(slot, dial))
+                GLib.idle_add(self._on_spots, slot, band.name if band else "", self._demo_spots(slot, dial), dial)
             return
         samples, present = self.recorder.extract(slot * wspr.PERIOD, wspr.WAV_SECONDS)
         if present < 0.8:
@@ -299,9 +305,9 @@ class WsprEngine(GObject.Object):
             spots = [s for s in (wspr.parse_wsprd_line(line) for line in out.splitlines()) if s]
         except Exception as exc:
             log.warning("wsprd failed: %s", exc)
-        GLib.idle_add(self._on_spots, slot, band, spots)
+        GLib.idle_add(self._on_spots, slot, band, spots, dial)
 
-    def _on_spots(self, slot: int, band: str, spots: list[wspr.Spot]) -> bool:
+    def _on_spots(self, slot: int, band: str, spots: list[wspr.Spot], dial: int | None = None) -> bool:
         self._decoding = False
         now = time.time()
         mine = self.settings.grid
@@ -315,7 +321,7 @@ class WsprEngine(GObject.Object):
         self.heard = [h for h in self.heard if now - h.time < SPOT_HOURS * 3600] + new
         self.emit("spots", slot, new)
         if new and self.settings.wspr_upload and not self.demo:
-            threading.Thread(target=self._upload, args=(slot, list(new), self.station.radio.frequency),
+            threading.Thread(target=self._upload, args=(slot, list(new), dial if dial is not None else self.station.radio.frequency),
                              name="wsprnet", daemon=True).start()
         return False
 

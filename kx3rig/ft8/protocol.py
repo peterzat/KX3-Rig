@@ -79,3 +79,11 @@ FT4 = Protocol(
 )
 
 PROTOCOLS = {p.name: p for p in (FT8, FT4)}
+
+
+def follow_dial(was_on: bandplan.Band | None, proto: Protocol) -> int | None:
+    """After a switch to proto, the dial to follow onto, or None to leave the radio alone.
+
+    Follow only when the radio was on the old protocol's dial and the new one has a dial
+    on that band."""
+    return proto.dial(was_on) if was_on is not None else None

@@ -543,7 +543,7 @@ def test_ft4_runs_through_the_same_engine(station, engine, monkeypatch):
 
     assert engine.set_protocol("FT4") and engine.proto is FT4 and engine.period == 7.5
     station.tune_to(FT4.dial(bandplan.BY_NAME["20m"]))
-    assert pump(lambda: station.radio.frequency == 14_080_000)
+    assert pump(lambda: station.radio.frequency == 14_080_000 and not station.link.tuning_pending)
     assert engine.on_ft8_frequency().name == "20m"
     monkeypatch.setattr(engine, "_wave", lambda text: np.zeros(4800, np.float32))
     assert engine.call_cq().allowed
@@ -553,6 +553,16 @@ def test_ft4_runs_through_the_same_engine(station, engine, monkeypatch):
     assert engine.transmitting_text.startswith("CQ N0CALL")
     engine.halt()
     assert engine.set_protocol("FT8") and engine.settings.digital_mode == "FT8"
+
+
+def test_switching_protocol_follows_only_from_a_digital_dial():
+    from kx3rig import bandplan
+    from kx3rig.ft8.protocol import FT4, FT8, follow_dial
+
+    assert follow_dial(bandplan.BY_NAME["20m"], FT4) == 14_080_000
+    assert follow_dial(None, FT4) is None                   # not on the old dial: stay put
+    assert follow_dial(bandplan.BY_NAME["160m"], FT4) is None   # FT4 has no 160 m dial
+    assert follow_dial(bandplan.BY_NAME["20m"], FT8) == bandplan.BY_NAME["20m"].ft8
 
 
 def test_ft4_contacts_log_as_mfsk(station, engine, tmp_path):
@@ -565,3 +575,64 @@ def test_ft4_contacts_log_as_mfsk(station, engine, tmp_path):
     text = open(engine.log_path).read()
     assert "<mode:4>MFSK" in text and "<submode:3>FT4" in text
     assert ("W1AW", "20m") in adif.worked(engine.log_path)
+
+
+def _faded_contact(station, engine, monkeypatch):
+    """A contact that ran out of repeats with no reply: the engine is waiting."""
+    from kx3rig.ft8 import sequencer as seq_mod
+
+    monkeypatch.setattr(engine, "_wave", lambda text: np.zeros(4800, np.float32))
+    assert engine.answer(_cq()).allowed
+    events = []
+    engine.connect("event", lambda e, kind, msg: events.append(kind))
+    seq = engine.sequencer
+    seq.repeats = seq_mod.MAX_REPEATS - 1
+    engine.transmitting_text = "W1AW N0CALL DM79"
+    engine._tx_done(seq, "W1AW N0CALL DM79", True)
+    assert "waiting" in events and seq.waiting
+    return events
+
+
+def test_engine_waits_without_keying(station, engine, monkeypatch):
+    _faded_contact(station, engine, monkeypatch)
+    seq = engine.sequencer
+    slot = 2000 if seq.tx_even else 2001
+    engine._maybe_transmit(engine_slot_start(slot) + 0.3)
+    assert engine.transmitting_text == "" and not station.data_transmitting
+
+
+def test_engine_resumes_when_the_station_answers(station, engine, monkeypatch):
+    from kx3rig.ft8.messages import parse
+    from kx3rig.ft8.sequencer import Decode
+
+    events = _faded_contact(station, engine, monkeypatch)
+    seq = engine.sequencer
+    heard_slot = 3001                      # they answer in an odd period
+    back = Decode(slot=heard_slot, snr=-12, dt=0.1, freq=1200, text="N0CALL W1AW -12",
+                  message=parse("N0CALL W1AW -12"))
+    from kx3rig.ft8.decode import RawDecode
+    engine._on_decoded(heard_slot, [RawDecode("000000", back.snr, back.dt, back.freq, back.text, False, "")],
+                       engine.proto)
+    assert "resumed" in events and not seq.waiting and seq.tx_even is True
+    assert pump(lambda: not station.link.tuning_pending)
+    engine._maybe_transmit(engine_slot_start(3002) + 0.3)
+    assert engine.transmitting_text == "W1AW N0CALL R-07"     # our report of them, from their CQ
+
+
+def test_engine_gives_up_when_the_wait_ends(station, engine, monkeypatch):
+    events = _faded_contact(station, engine, monkeypatch)
+    engine.sequencer.wait_until = 0          # long past
+    engine._tick()
+    assert "gave-up" in events and not engine.sequencer.active
+
+
+def test_halt_ends_the_wait(station, engine, monkeypatch):
+    _faded_contact(station, engine, monkeypatch)
+    engine.halt()
+    assert not engine.sequencer.waiting and not engine.sequencer.active and not engine.busy
+
+
+def engine_slot_start(slot):
+    from kx3rig.ft8.decode import slot_start
+
+    return slot_start(slot)

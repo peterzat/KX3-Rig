@@ -9,7 +9,8 @@ from kx3rig import bandplan, config
 from kx3rig.cat import Mode
 from kx3rig.controller import Station
 from kx3rig.keyboard import cw, psk31
-from kx3rig.keyboard.engine import CW, PSK31, KeyboardEngine, cw_dial, expand, heard_call
+from kx3rig.keyboard.engine import (CW, PSK31, PSK_DIALS, PSK_OFFSET_HZ, KeyboardEngine, cw_dial, expand,
+                                   heard_call)
 
 
 def pump(predicate, timeout=4.0):
@@ -133,3 +134,24 @@ def test_log_a_cw_contact(station, kb, monkeypatch, tmp_path):
     assert "<mode:2>CW" in text and "<rst_sent:3>579" in text and "<name:3>Ann" in text
     assert entry.dial_hz == station.radio.frequency + 700 and kb.their_call == ""
     assert ("K7CW", "20m") in adif.worked(kb.log_path)
+
+
+def test_no_psk31_default_lands_in_an_ft8_or_ft4_window():
+    from kx3rig.ft8.protocol import PROTOCOLS
+
+    for name, dial in PSK_DIALS.items():
+        band = bandplan.BY_NAME[name]
+        lo, hi = dial + PSK_OFFSET_HZ - 30, dial + PSK_OFFSET_HZ + 30
+        for proto in PROTOCOLS.values():
+            d = proto.dial(band)
+            if d is not None:
+                assert hi < d + 200 or lo > d + 3000, (name, proto.name)
+
+
+def test_demo_plays_ft8_not_psk31_on_digital_dials():
+    from kx3rig.demo import DemoAudio
+    from kx3rig.ft8.protocol import FT4, FT8
+
+    for proto, name in ((FT8, "17m"), (FT4, "12m"), (FT8, "30m")):
+        assert DemoAudio._keyboard_kind(proto.dial(bandplan.BY_NAME[name])) == ""
+    assert DemoAudio._keyboard_kind(PSK_DIALS["20m"]) == PSK31

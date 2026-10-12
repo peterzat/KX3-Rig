@@ -67,6 +67,12 @@ class Decode:
         return self.slot % 2 == 0
 
 
+def answerable(d: Decode, my_call: str) -> bool:
+    """Whether double-clicking d may answer its sender: a CQ, or a message addressed to us."""
+    msg = d.message
+    return bool(msg.de and msg.de != "<...>" and (msg.is_cq or msg.addressed_to(my_call)))
+
+
 @dataclass
 class Contact:
     call: str

@@ -47,11 +47,11 @@ WIDTH_HZ = {PSK31: 60, CW: 100}
 
 # PSK31 dial frequencies (USB, signals about 1 kHz above), from fldigi's default
 # list (src/rigcontrol/rigsupport.cxx); the KX3 Owner's Manual p.18 also suggests
-# 14070-14073 kHz.
+# 14070-14073 kHz. fldigi's 17 m (18.100) and 12 m (24.920) dials are left out: a
+# signal 1 kHz up lands inside the FT8 (18.100) and FT4 (24.919) windows there.
 PSK_DIALS = {
     "160m": 1_807_000, "80m": 3_580_000, "40m": 7_070_000, "30m": 10_135_000,
-    "20m": 14_070_000, "17m": 18_100_000, "15m": 21_070_000, "12m": 24_920_000,
-    "10m": 28_120_000,
+    "20m": 14_070_000, "15m": 21_070_000, "10m": 28_120_000,
 }
 
 

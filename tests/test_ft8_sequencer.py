@@ -1,5 +1,5 @@
 from kx3rig.ft8.messages import parse
-from kx3rig.ft8.sequencer import Decode, Sequencer, Stage
+from kx3rig.ft8.sequencer import Decode, Sequencer, Stage, answerable
 
 ME, GRID = "K1ABC", "FN42"
 
@@ -114,6 +114,13 @@ def test_answering_a_direct_call():
     s = Sequencer(ME, GRID)
     assert s.answer(dec("K1ABC W1AW FN31", snr=-4))
     assert s.next_message() == "W1AW K1ABC -04"
+
+
+def test_only_a_cq_or_a_call_to_us_is_answerable():
+    assert answerable(dec("CQ W1AW FN31"), ME)
+    assert answerable(dec("K1ABC W1AW FN31"), ME)
+    assert not answerable(dec("W1AW K2ABC R-05"), ME)     # mid-contact with someone else
+    assert not answerable(dec("CQ <...>"), ME)
 
 
 def test_cannot_answer_self_or_unknown():
