@@ -25,6 +25,16 @@ Source keys:
   https://www.qsl.net/wb6dwd/QRPFrequencies.htm (they agree; neither names a publisher).
 - **PSKR**: PSKReporter retrieval API, https://pskreporter.info/pskdev.html.
 - **SWPC**: NOAA Space Weather Prediction Center JSON products, https://services.swpc.noaa.gov.
+- **WSX**: WSJT-X source, `git.code.sf.net/p/wsjt/wsjtx` master b4f9a43 (2025-02-04, the
+  `wsjtx-2.7` branch); file and line numbers below refer to it. FT4 and WSPR changes in 3.0.2,
+  if any, are **UNVERIFIED**.
+- **WS**: WSJT-X Improved ("WS - Digital Mode Suite") by DG2YCB: release notes, the "additional
+  features" PDF (2025-10-11), and the user guide, https://wsjt-x-improved.sourceforge.io (read
+  2026-10-12). Its home page asks that any adapted function credit it with a link.
+- **FL**: fldigi at commit 61b97f4, https://github.com/w1hkj/fldigi (`src/psk/pskvaricode.cxx`,
+  `src/psk/psk.cxx`, `src/cw_rtty/cw.cxx`, `src/cw_rtty/morse.cxx`, `src/rigcontrol/rigsupport.cxx`).
+- **G3PLX**: the PSK31 specification as published by the ARRL, https://www.arrl.org/psk31-spec.
+- **ITU**: ITU-R M.1677-1, International Morse code.
 
 ## CAT protocol (cat.py, radio.py)
 
@@ -281,6 +291,80 @@ AlexLoop (PY1AHD). alexloop.com is parked; pages were read from the Wayback Mach
 - Clock: the User Guide asks for UTC within ±1 s. This machine runs systemd-timesyncd and was
   synchronized (offset about -70 ms) on 2026-10-10.
 
+## FT4, WSPR, PSK31, CW (ft8/ft4.py, ft8/protocol.py, wspr/, keyboard/)
+
+FT4:
+- `jt9 -5` decodes FT4 (WSX lib/jt9.f90:59, 141-142). Lines use FT8's format with ` + ` in place
+  of ` ~ ` (lib/decoder.f90:724-725). jt9 reads 72576 samples (6.048 s; jt9.f90:260); WSJT-X
+  decodes at that point in each 7.5 s period (mainwindow.cpp:7596). TX audio starts 0.3 s in
+  (Modulator/Modulator.cpp:76).
+- `ft4code` is built but not installed (CMakeLists.txt:1258 against the install list at
+  1663-1673), so KX3-Rig encodes FT4 itself: lib/ft4/genft4.f90 (rvec scrambling, the 103-tone
+  frame with Costas arrays 0132 1023 2310 3201, Gray map 00 01 11 10 to tones 0-3),
+  lib/ft8/encode174_91.f90 with lib/ft8/ldpc_174_91_c_generator.f90, lib/crc14.cpp, and
+  lib/ft4/gen_ft4wave.f90 (GFSK BT = 1.0, h = 1, 576 samples per symbol at 12 kHz, 105 symbol
+  times including two ramp symbols, 5.04 s). The LDPC and CRC port reproduces `ft8code`'s printed
+  parity for a captured message (tests/test_ft4.py).
+- Dials (models/FrequencyList.cpp): 3.575, 7.0475, 10.140, 14.080, 18.104, 21.140, 24.919, 28.180,
+  50.318 MHz; none for 160 or 60 m. FT4 always sends RR73 (mainwindow.cpp:5884).
+- ADIF: FT4 is SUBMODE FT4 of MODE MFSK; PSK31 is SUBMODE PSK31 of MODE PSK (ADIF 3.1 mode
+  table, as WSJT-X writes them).
+
+WSPR:
+- `wsprd [-a dir] [-f MHz] [-C n] [-o n] file.wav` (lib/wsprd/wsprd.c:708-761). It skips a fixed
+  44-byte header and reads 114 x 12000 16-bit samples without checking the rate (wsprd.c:122,
+  146-147), and takes date and time from a `yymmdd_hhmm.wav` name (966-967). Output lines are
+  `%4s %3.0f %4.1f %10.6f %2d  %-s` (time, SNR, DT, MHz, drift, message), ending
+  `<DecodeFinished>` (1505-1524).
+- `wsprcode` is not installed either. KX3-Rig ports the encoder from lib/wsprd/wsprsim_utils.c
+  and lib/genwspr.f90: 28-bit call and 22-bit grid/power packing, K = 32 rate-1/2 convolutional
+  code (polynomials 0xf2d05351 and 0xe4613c47, fano.c:13 `LL 1`), bit-reversal interleaving,
+  and the 162-entry sync vector. Its symbols match the C encoder, compiled and run for seven
+  messages (tests/test_wspr_protocol.py).
+- Waveform: 162 symbols of 8192 samples at 12 kHz, tone spacing 12000/8192 Hz, centered on the
+  audio frequency (mainwindow.cpp:9114), starting 1 s after an even minute (Modulator.cpp:72):
+  110.6 s. WSJT-X decodes after 114.05 s (mainwindow.cpp:1654). Audio 1400-1600 Hz.
+- Dials: 1.8366, 3.5686, 7.0386, 10.1387, 14.0956, 18.1046, 21.0946, 24.9246, 28.1246 MHz, and
+  50.293 MHz for Region 2 (FrequencyList.cpp:68-283).
+- Transmit share: WSJT-X fills a random 60-slot table per two hours; at 25% or less it uses
+  K1JT's random gaps (WSPR/WsprTxScheduler.cpp:130-219). KX3-Rig's TxScheduler follows that
+  idea and never sends two periods in a row below 50%.
+- Upload: `POST http://wsprnet.org/post/`, form-encoded, `function=wspr` per spot with `rcall,
+  rgrid, rqrg, date, time, sig, dt, drift, tqrg, tcall, tgrid, dbm, version, mode=2`
+  (Network/wsprnet.cpp:23, 306-314), after a random 0-20 s delay (mainwindow.cpp:9698-9703).
+  KX3-Rig sends the 4-character grid only.
+
+PSK31 (G3PLX, FL):
+- BPSK at 31.25 baud: a 0 is a phase reversal, a 1 is steady carrier; reversals are shaped with
+  a raised cosine (G3PLX sec. 1; FL psk.cxx tx_shape). Idle is reversals, the tail is carrier.
+- Varicode: FL `varicodetab1[]`. The ARRL HTML copy of the table has transcription errors (`p`
+  shown as `I`'s code, `Z` as `Y`'s). Characters are separated by "00", and no code contains
+  "00".
+- Dials (FL rigsupport.cxx:313-328, signals about 1 kHz up): 1.807, 3.580, 7.070, 10.135,
+  14.070, 18.100, 21.070, 24.920, 28.120 MHz. OM p.18 also suggests 14.070-14.073.
+
+CW:
+- Morse codes and spacing: ITU-R M.1677-1 sec. 1-2; codes as in FL morse.cxx. The decoder follows
+  FL cw.cxx: complex mixing and low-pass, hysteresis between a tracked peak and noise floor, and
+  speed tracking from adjacent dot-dash pairs with a length ratio of 2 to 4.
+- 47 CFR 97.3(c)(1): "CW. International Morse code telegraphy emissions having designators with
+  A, C, H, J or R as the first symbol; 1 as the second symbol; A or B as the third symbol; and
+  emissions J2A and J2B." A keyed tone in a sideband transmitter (J2A) is therefore CW, allowed
+  wherever the control operator may transmit (97.305(a)). PSK31 (J2B) is also RTTY
+  (97.3(c)(7)), so KX3-Rig checks it as data.
+- Why not the other keying methods: ACC1 is a 3-conductor jack (tip RX data, ring TX data, OM
+  p.5), so there is no RTS or DTR to key with, and the KX3 has no PTT-KEY menu (it is K3 only,
+  PR Table 5 entry 103). `KY` keys text through the KX3's keyer (PR p.15) and stays off the
+  allow-list.
+
+SWR and firmware:
+- `SW;` returns SWR in tenths (PR p.24). PR's change log says KX3 firmware 2.93 (p.33); FW lists
+  "ADDED SWR READ COMMAND" under MCU 2.95 (2018-12-04). KX3-Rig polls it from 2.93; on 2.93 or
+  2.94 an unanswered poll is harmless. Firmware is updated with Elecraft's KX3 Utility through
+  ACC1 (OM p.25, p.39).
+- WS stops transmitting above SWR 2.5 and colors the display yellow above 1.5 and red above 2.0
+  (WS user guide, "Rig Data"). KX3-Rig uses the same thresholds.
+
 ## Verified on this station's KX3 (2026-10-11, receive only)
 
 - Replies at 38400 8N2 with RTS/DTR held low: `ID017;`, `OM A-F----BX-02;`, `RVM02.38;`, `K20;`,
@@ -312,3 +396,6 @@ AlexLoop (PY1AHD). alexloop.com is parked; pages were read from the Wayback Mach
    ([live-test.md](live-test.md) section 5).
 9. Loop Tune: `IF`/`TQ` during front-panel TUNE, `PO` at TUN PWR 1.0 W, the receive-noise peak
    through AGC, the LED at 1 W on 40 m ([live-test.md](live-test.md) section 6).
+10. FT4, WSPR, PSK31, CW: a `jt9 -5` round trip of KX3-Rig's FT4, `wsprd` on real audio, PSK31
+    and CW decoding on a real band, transmit levels and spectra into a dummy load, and the SWR
+    guard after a firmware update ([live-test.md](live-test.md) section 7).

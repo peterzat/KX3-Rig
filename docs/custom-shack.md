@@ -114,6 +114,38 @@ What happened:
 8. **Screenshots of the running demo** were reviewed page by page before the work was
    committed.
 
+## Five more modes
+
+The next ask was short:
+- Take the best ideas from WSJT-X Improved.
+- Add more digital modes.
+- Do PSK31 and CW on the computer rather than with the KX3's built-in decoders, "for more
+  control".
+- Make every design and UI decision along the way.
+
+What happened:
+
+1. **Research ran in parallel.** One agent read WSJT-X Improved's release notes, features PDF,
+   and user guide. Another read the WSJT-X source for FT4 and WSPR. A third read the KX3
+   manuals, Part 97, the PSK31 spec, and fldigi.
+2. **Two findings changed the plan.** WSJT-X builds FT4 and WSPR encoders but does not install
+   them, so KX3-Rig had to encode both itself. And the KX3's ACC1 jack has no RTS or DTR, so
+   computer-keyed CW could not use the serial line.
+3. **The regulation settled the CW design.** 47 CFR 97.3(c)(1) counts a keyed tone in a sideband
+   transmitter (J2A) as CW. So CW is a shaped tone in DATA mode, checked against CW privileges,
+   and the allow-list's refusal of text keying stands.
+4. **Separate pieces went to separate agents.** The PSK31 modem, CW modem, FT4 encoder, and WSPR
+   encoder were each built by a forked agent, with its own tests, while the main session built
+   the engines and views.
+5. **Each port was checked against the original.** The FT4 encoder's LDPC code reproduces
+   `ft8code`'s parity bits. The WSPR encoder matches WSJT-X's own C encoder, compiled and run
+   for seven messages. The PSK31 and CW decoders read their own synthetic signals in noise.
+6. **Safety rules kept up.** A station-wide rule now lets only one self-keying activity run at a
+   time, the WSPR beacon stops by itself, and sharing spots online is off until the operator
+   turns it on.
+
+The design and sources are in [digital-modes.md](digital-modes.md).
+
 ## Everyone can have this
 
 None of this is special to one operator except the choices. The pattern is:

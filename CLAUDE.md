@@ -30,13 +30,17 @@ moment. Automated tests that transmit require a dummy load the operator has conf
 - Audio: PipeWire nodes for the Digirig match `usb-C-Media` / `USB_PnP_Sound_Device`. Every
   stream sets `node.dont-reconnect` and an explicit target so audio is never silently rerouted
   (listening audio must never reach the Digirig output).
-- FT8 uses WSJT-X's `jt9` and `ft8code` (WSJT-X 3.0.2 installed). Always pass `-c MYCALL` to jt9.
+- FT8 and FT4 use WSJT-X's `jt9` (`-8`, `-5`) and `ft8code` (WSJT-X 3.0.2 installed); WSPR uses
+  `wsprd`. WSJT-X does not install `ft4code` or `wsprcode`, so FT4 and WSPR encoding are ported
+  (ft8/ft4.py, wspr/protocol.py). Always pass `-c MYCALL` to jt9.
+- One self-keying activity at a time (FT8/FT4, the WSPR beacon, a keyboard message):
+  `Station.register_keyer` and `auto_keying()`. New transmit paths register too.
 - Demo mode (`--demo`, `--demo off`, `--demo unplugged`) runs the real link code against
   `fakeradio.FakeKX3` and synthesizes FT8 traffic that answers our transmissions. Demo contacts
   log to `kx3rig-demo-log.adi`, never the real log.
 
 **Visual review.** `--demo --screenshot DIR` renders the window to PNGs: `KX3RIG_SHOTS` picks
-plans from `radio,voice,ft8,qso,scan,loop`; `--demo off` or `--demo unplugged` capture the connect page.
+plans from `radio,voice,ft8,qso,scan,loop,ft4,keyboard,wspr`; `--demo off` or `--demo unplugged` capture the connect page.
 `--screenshot` refuses to run without `--demo` (the plans retune and transmit). When the
 desktop is locked or the display is off, GTK draws no frames; run inside a private headless
 compositor instead:
@@ -48,8 +52,9 @@ WAYLAND_DISPLAY=kx3shot .venv/bin/kx3-rig --demo --screenshot "$(mktemp -d)"
 ```
 
 **Network.** Only Smartscan goes online (PSKReporter at most every 5 minutes, SWPC every 15),
-only while it is on, and never in demo mode. Send nothing beyond the 4-character grid without
-the operator's say-so.
+only while it is on, and never in demo mode. The one exception is WSPR's Share Spots on WSPRnet,
+off by default: when the operator turns it on, it sends the callsign, the 4-character grid, and
+the spots heard. Send nothing beyond the 4-character grid without the operator's say-so.
 
 **macOS (convenience only).** The ThinkPad is the target. On the MacBook, Homebrew's GTK stack
 works with a venv made from `/opt/homebrew/bin/python3.14 -m venv --system-site-packages`;
@@ -80,5 +85,10 @@ titles and buttons, sentence case for descriptions).
 - `looptune/` state (where the AlexLoop is tuned, per-band widths), meter (receive-noise peak),
   tuner (the GObject the UI uses; reads the operator's TUNE carrier, never keys). Procedure
   and sources in docs/looptune.md.
-- `ui/` window, connect page, radio page, FT8 page, smartscan, looptune (the guide), frequency
-  readout, waterfall, meters, preferences, style.css.
+- `ft8/protocol.py` FT8 and FT4 timing and waveforms; `ft8/ft4.py` the FT4 encoder;
+  `ft8/filters.py` which decodes to show. Design in docs/digital-modes.md.
+- `keyboard/` PSK31 (varicode, psk31) and CW (cw) modems in numpy, and the engine (send one
+  composed message in DATA A; CW is a keyed tone, checked as CW).
+- `wspr/` protocol (encode, wsprd output, scheduler) and engine (decode, beacon, opt-in upload).
+- `ui/` window, connect page, radio page, FT8 page (FT8 and FT4), keyboard page, WSPR page,
+  smartscan, looptune (the guide), frequency readout, waterfall, meters, preferences, style.css.

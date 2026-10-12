@@ -149,7 +149,8 @@ class Ft8Engine(GObject.Object):
         if other:
             return bandplan.TxCheck(False, other)
         if not encode.available():
-            return bandplan.TxCheck(False, "WSJT-X's ft8code isn't installed, so FT8 can't be encoded.")
+            return bandplan.TxCheck(False, f"WSJT-X's ft8code isn't installed, so {self.proto.name} can't be "
+                                           "encoded.")
         if self.station.radio.mode is not Mode.DATA:
             return bandplan.TxCheck(False, "Switch the radio to DATA mode to transmit FT8.")
         sub = self.station.radio.data_submode

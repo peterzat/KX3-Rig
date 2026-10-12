@@ -2,14 +2,15 @@
 
 A friendly controller for the **Elecraft KX3**, made for the GNOME desktop. Plug in the radio,
 open the app, and start tuning. KX3-Rig shows a big tunable frequency, the band around you as a
-waterfall, lets you listen and talk through your computer, and runs FT8 contacts for you.
+waterfall, lets you listen and talk through your computer, runs FT8 and FT4 contacts for you,
+reads and sends PSK31 and CW, and maps who hears you on WSPR.
 
 ![KX3-Rig on a ThinkPad, receiving 40 meters through a Digirig on the Elecraft KX3](docs/screenshots/station.jpg)
 
 It is built for one station today: an Elecraft KX3 connected to an Ubuntu laptop through a
 **Digirig Mobile** and the Elecraft KX cable set, with a magnetic loop antenna.
 
-![KX3-Rig on 20 meters](docs/screenshots/radio-dark.png)
+<img src="docs/screenshots/radio-dark.png" width="640" alt="KX3-Rig on 20 meters">
 
 ## Why this exists
 
@@ -35,7 +36,7 @@ to talk to. Loop Tune guides the AlexLoop's tuning procedure and quietly says wh
 Each was researched from sources, designed around this station's rules, and verified against
 the emulator, both in a single Claude Code session.
 
-![Smartscan sweeping 20 meters (demo)](docs/screenshots/scan-dark.png)
+<img src="docs/screenshots/scan-dark.png" width="640" alt="Smartscan sweeping 20 meters (demo)">
 
 The idea behind it is [The Bitter Lesson of Agentic Coding](https://agent-hypervisor.ai/posts/bitter-lesson-of-agentic-coding/):
 "Define what done looks like. Let the model figure out how to get there. Build the simplest
@@ -59,8 +60,10 @@ What KX3-Rig reuses:
 - **The rules and the band plan**: 47 CFR Part 97 for license privileges, and the ARRL band plan
   and published QRP calling frequencies for where Smartscan listens.
 - **PSKReporter and NOAA SWPC**: live band conditions for Smartscan.
-- **Backlog**: [WSJT-X Improved](https://sourceforge.net/projects/wsjt-x-improved/) as a place to
-  borrow ideas from.
+- **WSJT-X Improved** (DG2YCB): ideas, not code. Keeping a fading contact alive, the Armed
+  warning, decode filters, callsigns on the waterfall, and the SWR stop.
+- **fldigi and G3PLX's PSK31 specification**: the Varicode table, PSK31 shaping, and the CW
+  decoder's design, for the Keyboard view.
 
 ## What it does
 
@@ -79,19 +82,37 @@ What KX3-Rig reuses:
   meter, then checks it with a short, low-power TUNE that you key on the radio. A small tag
   under the frequency turns amber when you have moved far enough, or changed band, to need it
   again. See [docs/looptune.md](docs/looptune.md).
-- **Work FT8**: one click sets the radio up, decodes appear every 15 seconds, and
+- **Work FT8 or FT4**: one click sets the radio up, decodes appear every period, and
   double-clicking a CQ runs the whole contact and logs it in ADIF.
+  - Each decode shows distance and direction, and a New tag marks stations not in your log.
+  - Callsigns sit over the waterfall where they were heard; double-click one to answer.
+  - Filters hide doubtful decodes, logged stations, or everything but CQs.
+  - A contact that fades waits a few minutes for the other station and picks up if they come
+    back.
+- **Keyboard: PSK31 and CW**, read and typed on the computer. Click a signal to read it. Every
+  PSK31 signal on the band is listed with its latest text. Macros fill in the calls, and
+  contacts go to the same log.
+- **WSPR**: hear who is on the air and see them on a map by direction and distance. Run a beacon
+  for a set time to find out how well the loop gets out (see who heard you on wsprnet.org).
+- **Stop on high SWR**: when the KX3 reports SWR above 2.5:1 during a transmission, KX3-Rig stops
+  and offers Loop Tune. This needs KX3 firmware 2.93 or later.
+- See [docs/digital-modes.md](docs/digital-modes.md) for how the new modes work and why.
 - **Stay legal**: transmit is limited to your license class's privileges (set your callsign,
   grid, and class in Preferences first), and the app explains why when it can't transmit
   somewhere.
 
-![An FT8 contact in progress](docs/screenshots/ft8-contact.png)
+<img src="docs/screenshots/ft8-contact.png" width="640" alt="An FT8 contact in progress">
+
+<p align="center"><img src="docs/screenshots/wspr-map.png" width="360" alt="The WSPR map: who is heard, by direction and distance (demo)"></p>
+
+<img src="docs/screenshots/psk31-dark.png" width="640" alt="PSK31 in the Keyboard view, four signals read at once (demo)">
 
 ## Requirements
 
 - Ubuntu 24.04 (GTK 4.14, libadwaita 1.5, PipeWire), Python 3.12
-- [WSJT-X](https://wsjt.sourceforge.io/wsjtx.html) installed, for FT8 (tested with 3.0.2; KX3-Rig uses
-  its `jt9` decoder and `ft8code` encoder)
+- [WSJT-X](https://wsjt.sourceforge.io/wsjtx.html) installed, for FT8, FT4 and WSPR (tested with
+  3.0.2; KX3-Rig uses its `jt9` and `wsprd` decoders and its `ft8code` message packer). PSK31 and
+  CW need nothing extra.
 - An Elecraft KX3 with its `RS232` menu set to **38400**, a Digirig Mobile (RS-232 build) and
   the Digirig Elecraft KX cable set. Plugs go in the KX3's left-side jacks: red in **MIC**, green
   in **PHONES**, black (serial) in **ACC1**; the Connect Your Radio page shows the same guide
@@ -123,7 +144,7 @@ including stations that answer you.
    ATU TUNE for about 2 seconds). Open KX3-Rig. It finds the Digirig and the radio by itself
    and shows a checklist until everything answers, with a guide to which plug goes in which jack.
 
-   ![Waiting for the radio, with the cable guide](docs/screenshots/connect.png)
+   <img src="docs/screenshots/connect.png" width="640" alt="Waiting for the radio, with the cable guide">
 
 2. **Tune.** Pick a band, pick a mode, and tune. Turn up the volume at the bottom left to hear
    the radio. The **Radio audio** meter at the bottom right should sit in the green; if it
@@ -135,13 +156,13 @@ including stations that answer you.
    **Loop Tuned** until you move away. The best practice, and why, is summarized at the top of
    [docs/looptune.md](docs/looptune.md).
 
-   ![Loop Tune peaking the loop on receive noise (demo)](docs/screenshots/loop-peak-dark.png)
+   <img src="docs/screenshots/loop-peak-dark.png" width="480" alt="Loop Tune peaking the loop on receive noise (demo)">
 
 4. **Talk.** In LSB, USB, AM, or FM, hold **Hold to Talk** and speak. The first time on a
    band, KX3-Rig asks you to confirm and says whether the loop is tuned for the frequency. Set
    the KX3's mic gain so its ALC shows about 5 bars while you speak.
-5. **FT8.** Open the **FT8** view and press **Tune Radio to FT8** (or choose a band). After a
-   cycle or two, decodes appear. Double-click a CQ to answer it, or press **Call CQ**. The app
+5. **FT8.** Open the **FT8** view, pick FT8 or FT4 at the top, and press **Tune Radio to FT8**
+   (or choose a band). After a cycle or two, decodes appear. Double-click a CQ to answer it, or press **Call CQ**. The app
    sends each message on time, follows the exchange, and logs the contact when it is
    complete. **Stop** (or Esc) ends it immediately.
 
@@ -154,10 +175,15 @@ including stations that answer you.
    the band buttons show which bands are open near you; stations appear under the waterfall as
    they are heard. Press play to hear why one was listed, and **Tune** to stop and listen. Stop
    or Esc puts the radio back where it was.
+7. **Keyboard and WSPR.** In the **Keyboard** view, pick PSK31 or CW and press **Tune Radio**,
+   then click a signal to read it. Type or pick a macro and press **Send**. In the **WSPR** view,
+   press **Tune Radio to WSPR** and wait a cycle or two for the map to fill. **Start Beacon**
+   transmits now and then for the time you choose.
+
 
 ## Safety
 
-![The first transmission on a band asks for confirmation](docs/screenshots/confirm.png)
+<img src="docs/screenshots/confirm.png" width="480" alt="The first transmission on a band asks for confirmation">
 
 - KX3-Rig clears RTS and DTR before opening the serial port (RTS keys the Digirig's
   push-to-talk). A brief RTS pulse from the USB serial driver during open has not been ruled
@@ -176,12 +202,26 @@ including stations that answer you.
   menus either: it asks you to set TUN PWR and ATU MD.
 - Smartscan only receives. Every transmit path is refused while it sweeps, and transmitting
   (or Esc) stops it.
+- Only one thing transmits on its own schedule at a time: an FT8 or FT4 contact, the WSPR beacon,
+  or a keyboard message. An amber **Armed** tag in the header shows when one may transmit at
+  its next turn.
+- The WSPR beacon runs only for the time you choose (up to 2 hours), and Stop or Esc ends it.
+  A fading FT8 contact waits at most a few minutes and only for the station you were working.
+- CW is sent as a keyed tone in DATA mode (emission J2A), which 47 CFR 97.3(c)(1) counts as CW.
+  KX3-Rig checks it against your CW privileges. Every message is one transmission of at most
+  110 s.
+- Transmissions stop when the SWR passes 2.5:1 (KX3 firmware 2.93 or later).
 
 ## Privacy
 
-KX3-Rig goes online only while Smartscan is on. It asks PSKReporter for reception reports from
-your 4-character grid square every 5 minutes (no callsign or email is sent), and NOAA SWPC for
-the K index every 15 minutes. Demo mode never goes online.
+KX3-Rig goes online only while Smartscan is on, or when you turn on WSPR sharing:
+- Smartscan asks PSKReporter for reception reports from your 4-character grid square every 5
+  minutes (no callsign or email is sent), and NOAA SWPC for the K index every 15 minutes.
+- **Share Spots on WSPRnet** is off until you turn it on. Then, after each two-minute cycle,
+  KX3-Rig sends wsprnet.org your callsign, your 4-character grid, and the stations you heard, as
+  WSJT-X does.
+
+Demo mode never goes online.
 
 ## First time with the radio
 
@@ -213,7 +253,8 @@ clutter.
 The code is in `kx3rig/`: `cat.py` (the KX3 command set and allow-list), `radio.py` (the
 serial link), `audio.py` (PipeWire streams), `ft8/` (decode, encode, sequencing, logging),
 `smartscan/` (sweep, detection, heard list, band conditions), `looptune/` (loop state,
-receive-noise meter, TUNE readout), and `ui/` (the interface). Sources for every radio fact are in
+receive-noise meter, TUNE readout), `keyboard/` (PSK31 and CW modems), `wspr/` (WSPR encode,
+decode, beacon), and `ui/` (the interface). Sources for every radio fact are in
 [docs/references.md](docs/references.md).
 
 ## Credits
@@ -226,6 +267,11 @@ Gladstone) and the [NOAA Space Weather Prediction Center](https://www.swpc.noaa.
 behavior was cross-checked against [Hamlib](https://hamlib.github.io). Loop Tune's procedure
 follows AlexLoop maker Alex Grimberg, PY1AHD, and the published experience of many operators,
 credited in [docs/references.md](docs/references.md#loop-tune-looptune).
+Ideas for the FT8 view (keeping a fading contact alive, the Armed warning, filters, callsigns on
+the waterfall, the SWR stop) come from [WSJT-X Improved](https://wsjt-x-improved.sourceforge.io)
+by Uwe Risse, DG2YCB. The PSK31 Varicode table and the CW decoder's design follow
+[fldigi](http://www.w1hkj.com) by Dave Freese, W1HKJ, and PSK31 itself is Peter Martinez's,
+G3PLX. WSPR's encoder is ported from WSJT-X.
 The interface design follows [Bottles](https://usebottles.com) and the
 [GNOME Human Interface Guidelines](https://developer.gnome.org/hig/).
 

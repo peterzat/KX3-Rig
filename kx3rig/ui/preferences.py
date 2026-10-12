@@ -46,10 +46,20 @@ def build(station, on_saved) -> Adw.PreferencesDialog:
             s.grid = text[:2].upper() + text[2:4] + text[4:].lower()
             save()
 
+    name = Adw.EntryRow(title="Your Name (for PSK31 and CW macros)", text=s.operator_name)
+
+    def on_name(row):
+        text = " ".join(row.get_text().split())[:20]
+        if text != s.operator_name:
+            s.operator_name = text
+            save()
+
     call.connect("changed", on_call)
     grid.connect("changed", on_grid)
+    name.connect("changed", on_name)
     group.add(call)
     group.add(grid)
+    group.add(name)
     license_row = Adw.ComboRow(title="License Class", subtitle="Transmit is limited to your privileges")
     license_row.set_model(Gtk.StringList.new(list(config.LICENSE_CLASSES)))
     license_row.set_selected(config.LICENSE_CLASSES.index(s.license_class))

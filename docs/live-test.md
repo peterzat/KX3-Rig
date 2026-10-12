@@ -2,7 +2,7 @@
 
 KX3-Rig has been tested against a simulated KX3 and on this laptop's audio devices, but not yet on
 the radio. Work through this list the first time the KX3 is attached. Steps 1, 2, and 5 never transmit.
-Steps 3-4 transmit; do them yourself, as control operator, starting with a dummy load. Record
+Steps 3, 4, 6, and 7 transmit; do them yourself, as control operator, starting with a dummy load. Record
 anything verified in [references.md](references.md) ("Open items to verify on the radio").
 
 ## Before you start
@@ -78,6 +78,28 @@ anything verified in [references.md](references.md) ("Open items to verify on th
 - Tap XMIT. Answer the SWR question; the guide finishes and the tag reads **Loop Tuned**.
 - Move 10 kHz on 20 m: the tag turns amber (**Peak Loop**). Change to 40 m: **Tune Loop**, and
   a notification. Start Smartscan there: the guide opens first and starts the sweep when done.
+
+## 7. FT4, Keyboard (PSK31, CW), WSPR, SWR guard
+
+Receive first; transmit only into the dummy load until each mode looks right.
+
+- FT4: in the FT8 view pick FT4 and 20 m (14.080). Decodes should arrive every 7.5 s. Callsigns
+  appear over the waterfall and distances on each line. Into the dummy load, press **Call CQ**
+  and confirm with a second receiver or WebSDR, or by recording the KX3's PHONES audio and
+  running `jt9 -5` on it, that KX3-Rig's own FT4 decodes (open item 10).
+- PSK31: in the Keyboard view pick PSK31, 20 m, Tune Radio (14.070). Signals Heard should fill
+  within a minute on a busy band. Click one and compare the text with fldigi or the KX3's own
+  decoder. Into the dummy load, send a CQ and check ALC (4-5 bars at most) and, on a second
+  receiver, that it is clean and about 60 Hz wide.
+- CW: pick CW, 20 m, Tune Radio (the tone lands on 14.060). Find Tone, then read a station and
+  note the speed shown. Into the dummy load, send "TEST" and check the keying on a second
+  receiver: no clicks, correct speed.
+- WSPR: in the WSPR view, Tune Radio to 20 m (14.0956) and wait two cycles: spots should appear
+  on the map (needs `wsprd`). Into the dummy load, start the beacon at 1 in 3 for 30 minutes and
+  watch one transmission: ON AIR for about 111 s, starting 1 s after the even minute.
+- SWR guard: needs KX3 firmware 2.93 or later (2.95 per Elecraft's notes). After an update,
+  transmit FT8 Tune with the loop deliberately detuned: KX3-Rig should stop within about a second
+  of the SWR passing 2.5 and offer Loop Tune.
 
 ## After
 
