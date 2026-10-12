@@ -98,3 +98,10 @@ progressbar.cycle.tx progress { background-color: @error_bg_color; }
 
 /* Control rows (Band, Mode) */
 .control-label { min-width: 48px; }
+
+/* Smartscan */
+.cond-dot { min-width: 6px; min-height: 6px; border-radius: 9999px; }
+.cond-dot.open { background-color: @success_color; }
+.cond-dot.fair { background-color: @warning_color; }
+.cond-dot.quiet { background-color: alpha(currentColor, 0.25); }
+.band-scope { background-color: @view_bg_color; }

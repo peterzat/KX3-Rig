@@ -38,9 +38,10 @@ def _label(text: str, *classes: str, **kw) -> Gtk.Label:
 class RadioPage(Gtk.Box):
     __gtype_name__ = "KX3RadioPage"
 
-    def __init__(self, station, toast, confirm_tx=None):
+    def __init__(self, station, toast, confirm_tx=None, smartscan=None):
         super().__init__(orientation=Gtk.Orientation.VERTICAL)
         self.station = station
+        self.smartscan = smartscan
         self.toast = toast
         self.confirm_tx = confirm_tx       # callable(action): per-band first-TX confirmation
         self._syncing = False
@@ -83,6 +84,19 @@ class RadioPage(Gtk.Box):
         controls.attach(self._build_modes(), 1, 1, 1, 1)
         body.append(controls)
 
+        # --- smartscan ------------------------------------------------------------------
+        self.scan_panel = None
+        if smartscan is not None:
+            from .smartscan import SmartscanPanel
+
+            self.scan_panel = SmartscanPanel(smartscan, toast)
+            controls.attach(_label("Scan", "caption-heading", "dim-label", "control-label", xalign=1), 0, 2, 1, 1)
+            controls.attach(self.scan_panel.header, 1, 2, 1, 1)
+            body.append(self.scan_panel.outlook)
+            smartscan.connect("conditions-changed", lambda s: self._update_band_outlook())
+            smartscan.connect("changed", lambda s: self._update_band_outlook())
+            smartscan.connect("dwell", lambda s, d: self._on_dwell(d))
+
         # --- waterfall ------------------------------------------------------------------
         wf_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
         self.waterfall = Waterfall(station)
@@ -95,6 +109,8 @@ class RadioPage(Gtk.Box):
         wf_box.append(self.waterfall)
         wf_box.append(self.axis)
         body.append(wf_box)
+        if self.scan_panel is not None:
+            body.append(self.scan_panel.body)
 
         # --- talk ---------------------------------------------------------------------------
         body.append(self._build_talk())
@@ -143,9 +159,18 @@ class RadioPage(Gtk.Box):
         self.band_box.add_css_class("band-chips")
         self.band_buttons: dict[str, Gtk.ToggleButton] = {}
         group = None
+        self.band_dots: dict[str, Gtk.Widget] = {}
         for band in bandplan.BANDS:
-            btn = Gtk.ToggleButton(label=band.name.replace("m", ""))
-            btn.set_tooltip_text(f"{band.label}  ·  {band.low / 1e6:g}–{band.high / 1e6:g} MHz")
+            btn = Gtk.ToggleButton()
+            content = Gtk.Box(spacing=4, halign=Gtk.Align.CENTER)
+            content.append(Gtk.Label(label=band.name.replace("m", "")))
+            # Smartscan's outlook for the band: open, some activity, or quiet.
+            dot = Gtk.Box(valign=Gtk.Align.CENTER, visible=False)
+            dot.add_css_class("cond-dot")
+            content.append(dot)
+            btn.set_child(content)
+            self.band_dots[band.name] = dot
+            btn.set_tooltip_text(self._band_tip(band))
             if group is not None:
                 btn.set_group(group)
             group = group or btn
@@ -153,6 +178,31 @@ class RadioPage(Gtk.Box):
             self.band_buttons[band.name] = btn
             self.band_box.append(btn)
         return self.band_box
+
+    @staticmethod
+    def _band_tip(band) -> str:
+        return f"{band.label}  ·  {band.low / 1e6:g}–{band.high / 1e6:g} MHz"
+
+    def _update_band_outlook(self) -> None:
+        scan = self.smartscan
+        outlook = scan.outlook if scan is not None and scan.active else None
+        for band in bandplan.BANDS:
+            dot, btn = self.band_dots[band.name], self.band_buttons[band.name]
+            o = outlook.get(band.name) if outlook else None
+            for level in ("open", "fair", "quiet"):
+                dot.remove_css_class(level)
+            if o is None or o.level == "unknown":
+                dot.set_visible(False)
+                btn.set_tooltip_text(self._band_tip(band))
+                continue
+            dot.add_css_class(o.level)
+            dot.set_visible(True)
+            btn.set_tooltip_text(o.tooltip(scan.grid))
+
+    def _on_dwell(self, dwell) -> None:
+        dial, found, t0, t1 = dwell
+        if dial == self.station.radio.frequency:
+            self.waterfall.mark([(d.low_hz, d.high_hz, d.kind) for d in found if d.is_contact], t0, t1)
 
     def _build_modes(self) -> Gtk.Widget:
         box = Gtk.Box(halign=Gtk.Align.START)
@@ -242,12 +292,18 @@ class RadioPage(Gtk.Box):
             return
         current = bandplan.band_for(self.station.radio.frequency)
         if current is None or current.name != band.name:
+            if self.smartscan is not None and self.smartscan.active:
+                # A new band needs the loop peaked before a sweep is worth anything.
+                self.smartscan.stop(restore=False)
+                self.toast(f"Peak the loop on {band.label}, then start Smartscan again.")
             self.station.select_band(band)
 
     def _on_mode_toggled(self, button: Gtk.ToggleButton, mode: Mode) -> None:
         if self._syncing or not button.get_active():
             return
         if self.station.radio.mode is not mode:
+            if self.smartscan is not None and self.smartscan.active:
+                self.smartscan.stop(restore=False)
             self.station.select_mode(mode)
 
     def _on_power_changed(self, scale: Gtk.Scale) -> None:

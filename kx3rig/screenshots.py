@@ -63,6 +63,20 @@ def run(app, out_dir: str) -> None:
                       (t + 9400, lambda: app.station.link.set_frequency(14_074_000)),
                       (t + 9600, lambda: app.station.link.set_mode(Mode.DATA))]
             t += 10000
+        if "scan" in plan:
+            from .cat import Mode
+            wait = int(os.environ.get("KX3RIG_SCAN_WAIT", "60000"))
+            steps += [(t - 2500, lambda: app.station.link.set_frequency(14_300_000)),
+                      (t - 2000, lambda: app.station.link.set_mode(Mode.USB)),
+                      (t, lambda: win.show_view("radio")),
+                      # The demo loop is "peaked" where the dial rests for 8 s.
+                      (t + 9000, lambda: win.radio_page.scan_panel.toggle.set_active(True)),
+                      (t + 9000 + wait, lambda: capture(win, os.path.join(out_dir, "scan-light.png"))),
+                      (t + 9200 + wait, lambda: style.set_color_scheme(Adw.ColorScheme.FORCE_DARK)),
+                      (t + 10500 + wait, lambda: capture(win, os.path.join(out_dir, "scan-dark.png"))),
+                      (t + 10700 + wait, lambda: style.set_color_scheme(Adw.ColorScheme.DEFAULT)),
+                      (t + 10800 + wait, lambda: app.smartscan.stop())]
+            t += 12000 + wait
         if "radio" in plan:
             steps += [(t, lambda: win.show_view("radio")),
                       (t + 3000, lambda: capture(win, os.path.join(out_dir, "radio-light.png"))),

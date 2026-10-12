@@ -40,7 +40,7 @@ SHORTCUTS_UI = """<?xml version="1.0" encoding="UTF-8"?>
         <child>
           <object class="GtkShortcutsGroup">
             <property name="title">Transmit</property>
-            <child><object class="GtkShortcutsShortcut"><property name="title">Stop transmitting</property><property name="accelerator">Escape</property></object></child>
+            <child><object class="GtkShortcutsShortcut"><property name="title">Stop transmitting or Smartscan</property><property name="accelerator">Escape</property></object></child>
           </object>
         </child>
         <child>
@@ -69,6 +69,7 @@ class Application(Adw.Application):
         self.window = None
         self.station = None
         self.engine = None
+        self.smartscan = None
 
     def do_startup(self) -> None:
         Adw.Application.do_startup(self)
@@ -111,7 +112,10 @@ class Application(Adw.Application):
         elif self.demo == "unplugged":
             self.station.link._find_port = lambda: None
         self.engine = Ft8Engine(self.station, demo=bool(self.demo))
-        self.window = MainWindow(self, self.station, self.engine)
+        from .smartscan.engine import Smartscan
+
+        self.smartscan = Smartscan(self.station, self.engine, demo=bool(self.demo))
+        self.window = MainWindow(self, self.station, self.engine, self.smartscan)
         builder = Gtk.Builder.new_from_string(SHORTCUTS_UI, -1)
         self.window.set_help_overlay(builder.get_object("help_overlay"))
         if self.demo:
@@ -135,6 +139,8 @@ class Application(Adw.Application):
     def do_shutdown(self) -> None:
         # Always runs on quit (window closed, Ctrl+Q, SIGINT/SIGTERM): stop
         # transmitting, drop RTS, restore the radio's CAT state.
+        if self.smartscan:
+            self.smartscan.stop(restore=False)
         if self.engine:
             self.engine.stop()
         if self.station:
@@ -171,6 +177,8 @@ class Application(Adw.Application):
         )
         about.add_credit_section("Built On", [
             "WSJT-X by Joe Taylor, K1JT, and the WSJT Development Group (FT8 encode and decode) https://wsjt.sourceforge.io",
+            "PSKReporter by Philip Gladstone (band conditions) https://pskreporter.info",
+            "NOAA Space Weather Prediction Center (K index) https://www.swpc.noaa.gov",
             "GTK and libadwaita https://gnome.org",
         ])
         st = self.station.radio

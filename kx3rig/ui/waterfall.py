@@ -113,6 +113,10 @@ class Waterfall(Gtk.Widget):
         self.tx_offset: float | None = None
         self.passband: tuple[float, float] | None = None
         self.marker_width_hz = 50.0
+        # Smartscan findings: (t_start, t_end, low_hz, high_hz, kind), drawn
+        # around the signal in the scrolling history so they move with it.
+        self.marks: list[tuple[float, float, float, float, str]] = []
+        self.rows_per_second = station.spectrum.sample_rate / station.spectrum.hop
         self._img: np.ndarray | None = None
         self._row = 0
         self._width = 0
@@ -154,6 +158,16 @@ class Waterfall(Gtk.Widget):
         self._lut = build_lut(PALETTES[self.palette]["dark" if dark else "light"])
         if self._img is not None:
             self._upload()
+
+    def mark(self, spans: list[tuple[float, float, str]], t_start: float, t_end: float) -> None:
+        """Outline signals found between two wall-clock times."""
+        horizon = t_end - HISTORY_ROWS / self.rows_per_second
+        self.marks = [m for m in self.marks if m[1] > horizon]
+        for lo, hi, kind in spans:
+            # One finding per place: a longer listen replaces the quick one.
+            self.marks = [m for m in self.marks if not (m[0] == t_start and abs(m[2] - lo) < 300)]
+            self.marks.append((t_start, t_end, lo, hi, kind))
+        self.queue_draw()
 
     def clear(self) -> None:
         if self._img is not None:
@@ -288,10 +302,48 @@ class Waterfall(Gtk.Widget):
         if self.tx_offset is not None:
             self._marker(snap, self.tx_offset, self._color("error_bg_color", "#e01b24"), h, trace_h, solid=False)
 
+        if self.marks:
+            self._draw_marks(snap, w, h, trace_h, accent)
+
         if self._hover_x is not None:
             hover = Gdk.RGBA()
             hover.red, hover.green, hover.blue, hover.alpha = fg.red, fg.green, fg.blue, 0.35
             snap.append_color(hover, Graphene.Rect().init(self._hover_x, 0, 1, h))
+
+    def _draw_marks(self, snap, w, h, trace_h, accent) -> None:
+        import time as _time
+
+        now = _time.time()
+        scale = (h - trace_h) / HISTORY_ROWS * self.rows_per_second   # pixels per second of age
+        layout = self.create_pango_layout("")
+        for t0, t1, lo, hi, kind in self.marks:
+            y0 = trace_h + (now - t1) * scale
+            y1 = trace_h + (now - t0) * scale
+            if y0 >= h:
+                continue
+            y1 = min(y1, h - 1)
+            xa, xb = sorted((self._x_for(lo), self._x_for(hi)))
+            pad = 4 if kind == "cw" else 2
+            rect = Graphene.Rect().init(xa - pad, y0, xb - xa + 2 * pad, max(4.0, y1 - y0))
+            outline = Gsk.RoundedRect()   # kept referenced; see ui/smartscan.py _rounded
+            outline.init_from_rect(rect, 6)
+            color = Gdk.RGBA()
+            color.red, color.green, color.blue, color.alpha = accent.red, accent.green, accent.blue, 0.9
+            fill = Gdk.RGBA()
+            fill.red, fill.green, fill.blue, fill.alpha = accent.red, accent.green, accent.blue, 0.10
+            snap.push_rounded_clip(outline)
+            snap.append_color(fill, rect)
+            snap.pop()
+            snap.append_border(outline, [1.5] * 4, [color] * 4)
+            layout.set_text("CW" if kind == "cw" else "Voice", -1)
+            tw, th = layout.get_pixel_size()
+            if rect.get_height() > th + 4:
+                snap.save()
+                point = Graphene.Point()
+                point.x, point.y = max(2.0, min(w - tw - 2, rect.get_x() + 4)), y0 + 2
+                snap.translate(point)
+                snap.append_layout(layout, color)
+                snap.restore()
 
     def _marker(self, snap, hz, color, h, trace_h, solid) -> None:
         x0 = self._x_for(hz)

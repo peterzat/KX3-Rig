@@ -27,10 +27,11 @@ BANNERS = {
 class MainWindow(Adw.ApplicationWindow):
     __gtype_name__ = "KX3MainWindow"
 
-    def __init__(self, app, station, engine):
+    def __init__(self, app, station, engine, smartscan=None):
         super().__init__(application=app, title="KX3-Rig")
         self.station = station
         self.engine = engine
+        self.smartscan = smartscan
         self.set_default_size(1100, 860)
         self.set_size_request(380, 520)
         self._ever_connected = False
@@ -74,7 +75,7 @@ class MainWindow(Adw.ApplicationWindow):
         view = Adw.ToolbarView()
         header = Adw.HeaderBar()
         self.stack = Adw.ViewStack()
-        self.radio_page = RadioPage(self.station, self.toast, self.confirm_transmit)
+        self.radio_page = RadioPage(self.station, self.toast, self.confirm_transmit, self.smartscan)
         self.ft8_page = Ft8Page(self.station, self.engine, self.toast, self.confirm_transmit)
         self.stack.add_titled_with_icon(self.radio_page, "radio", "Radio", "kx3rig-transceiver-symbolic")
         self.stack.add_titled_with_icon(self.ft8_page, "ft8", "FT8", "network-transmit-receive-symbolic")
@@ -235,6 +236,8 @@ class MainWindow(Adw.ApplicationWindow):
         self.stack.set_visible_child_name(name)
 
     def halt(self) -> None:
+        if self.smartscan is not None:
+            self.smartscan.stop()
         self.engine.halt()
         self.station.halt_all()
 
