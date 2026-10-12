@@ -1,6 +1,6 @@
-## Review — 2026-10-12 (commit: 58c7e53)
+## Review — 2026-10-12 (commit: 9ec21fc)
 
-**Summary:** Light review of one unpushed commit on `main` (58c7e53, one ahead of `origin/main`): README.md, docs/custom-shack.md, and docs/looptune.md, 41 insertions and 20 deletions. `codereview-marker surface` is empty, so no code, configuration, or agent-instructing Markdown changed; tests, /security, external reviewers, the built-in review, and the fix loop were skipped. The three files were read in full and checked for broken links, secrets in prose, and factual accuracy. The new "Best practice, in short" section in docs/looptune.md matches the guide's code (`GOOD_SWR = 1.5` and the re-siting steps in kx3rig/ui/looptune.py, the `width / 2` retune threshold in kx3rig/looptune/state.py), the station's KXAT3 (docs/references.md:288), and the sources in docs/references.md. The `#the-procedure-and-why` anchor and both moved screenshots resolve. No secrets, callsigns, or locators were added; the commit removes the city from the README and custom-shack.md. No BLOCK or WARN.
+**Summary:** Light review of the two unpushed commits on `main` (58c7e53 and 9ec21fc, against `origin/main`): README.md, docs/custom-shack.md, and docs/looptune.md, 43 insertions and 21 deletions. `codereview-marker surface` is empty, so no code, configuration, or agent-instructing Markdown changed; tests, /security, external reviewers, the built-in review, and the fix loop were skipped. The three files were read in full and checked for broken links, secrets in prose, and factual accuracy. 9ec21fc resolves all three of the prior entry's new NOTEs: the summary now gives 17.5 kHz for 20 m (matching the table and `width / 2` in kx3rig/looptune/state.py), step 3 carries the faint-LED caveat, and the README's "both in a single Claude Code session" now agrees with docs/custom-shack.md:9 and docs/smartscan.md:132 (the commit times, 18:44 to 22:42 on 2026-10-11, fit one session). The `#the-procedure-and-why` anchor, the `docs/looptune.md` link, and the moved screenshots resolve. No secrets, callsigns, or locators were added. No BLOCK or WARN.
 
 **External reviewers:**
 Skipped (light review).
@@ -10,27 +10,23 @@ Skipped (light review).
 
 ### Findings
 
-[NOTE] docs/looptune.md:22-23 — The summary gives the 20 m retune distance as 17 kHz. The table on line 68 says 17.5 kHz, and the code retunes beyond `width / 2` of the 35 kHz width (kx3rig/looptune/state.py:24-31, 82). The line says "about half", so the effect is small, but the two figures on one page disagree. Confidence: high on the mismatch.
-  Evidence: "(5 kHz on 40 m, 17 kHz on 20 m)" against "| 20 m | 35 kHz | 8.75 kHz | 17.5 kHz |".
-  Suggested fix: Write 17.5 kHz.
+[NOTE] docs/looptune.md:18-19 (also :101-102) — The faint-LED advice says to raise TUN PWR to "2 or 3 W". The guide warns when TUNE runs strictly above 3.0 W (`TUNE_POWER_WARN_W = 3.0` and `self.max_power > TUNE_POWER_WARN_W`, kx3rig/looptune/tuner.py:31, 158) and then tells the operator to set TUN PWR to 1.0 W (kx3rig/ui/looptune.py:371-373). `PO` reports tenths of a watt (docs/references.md:50), so a 3 W setting that reads 3.1 W would draw a warning that contradicts the doc, shown as "running at 3 W". Confidence: medium on the mismatch, low that it occurs; what `PO` reads during TUNE is unverified at this station (docs/references.md:253). The advice at lines 101-102 predates this push; the summary now repeats it where the README points readers.
+  Evidence: "raise TUN PWR to 2 or 3 W" against `max_power > TUNE_POWER_WARN_W` with a 3.0 threshold.
+  Suggested fix: Advise "about 2 W", or raise the warning threshold a little above 3 W (for example 3.5 W) so a 3 W setting does not trip it.
 
-[NOTE] docs/looptune.md:12, 16-18 — The summary sets TUN PWR to 1.0 W and says to tune for "the brightest LED", but leaves out the caveat on lines 100-101 that the LED may be faint at 1 W on 40 m (raise TUN PWR to 2 or 3 W). A reader who stops at the summary, as the README now suggests (README.md:135-136), may not see the LED on 40 m. Confidence: medium that this matters; LED visibility at 1 W is still unverified at this station (docs/references.md:253-254).
-  Evidence: Step 3 "Nudge the knob for the lowest SWR and the brightest LED" with no 40 m qualifier.
-  Suggested fix: Add a clause to step 3, for example "(on 40 m the LED can be faint at 1 W; 2 or 3 W is fine)".
+[NOTE] docs/looptune.md:17-18 — "working from behind the loop. Let go, check again, and tap XMIT to stop." "Let go" can read as releasing XMIT, which does not end TUNE (it latches; tap XMIT to leave, OM p.33 per docs/references.md:189-191). The same sentence says to tap XMIT, so the outcome is safe; the guide's own wording at line 45 ("Take your hand away") is clearer. Confidence: low that a reader is misled.
+  Evidence: "Let go, check again" against "Take your hand away, check again" at line 45.
+  Suggested fix: Write "Take your hand off the loop, check again, and tap XMIT to stop."
 
-[NOTE] README.md:36; docs/custom-shack.md:9; docs/smartscan.md:132 — The docs disagree on how many sessions built Smartscan and Loop Tune. The README says "in one Claude Code session apiece". custom-shack.md says it "records how two of those features were made in one Claude Code session". These lines predate this commit, but the commit now points the README's readers to custom-shack.md for "How Smartscan and Loop Tune were built" (README.md:45-46), so they meet both claims. Confidence: medium that it is a contradiction; low on which count is right.
-  Evidence: "in one Claude Code session apiece" against "how two of those features were made in one Claude Code session".
-  Suggested fix: Settle on one count and use it in both files.
-
-Carried from the prior entry, still present in the files this commit changed:
-- [NOTE] docs/custom-shack.md:105 (was 106) — "The whole guide now runs, and is tested": `LoopTuneDialog` itself is still untested (no reference to it under tests/).
+Carried from the prior entry, still present:
+- [NOTE] docs/custom-shack.md:105 — "The whole guide now runs, and is tested": `LoopTuneDialog` itself is still untested (no reference to it under tests/; it appears only in kx3rig/ui/window.py and kx3rig/ui/looptune.py).
 - [NOTE] README.md:140-141, 160; docs/screenshots/confirm.png — The confirmation now describes the loop and offers Tune Loop; confirm.png (last changed in cf707b3) shows the old dialog.
 
-The prior entry's other NOTEs concern code already on `origin/main` that this commit does not touch. They were not re-checked here and remain open; the full list is in CODEREVIEW.md at e37e0ae.
+The NOTEs from the 26f1c86 full review concern code already on `origin/main` that these commits do not touch. They were not re-checked here and remain open; the full list is in CODEREVIEW.md at e37e0ae.
 
 ### Fixes Applied
 
-None.
+None in this run. 9ec21fc, committed by the author before this review, fixed the prior entry's three NOTEs (17.5 kHz, the faint-LED caveat, the session count).
 
 ### Accepted Risks
 
@@ -41,6 +37,6 @@ None.
   (2026-10-12). Anything more precise, such as a 6-character subsquare, stays out of the repo.
 
 ---
-*Prior review (2026-10-12, commit 26f1c86): full review of the `smartscan` branch after its history rewrite. Three WARNs (the Loop Tune guide on non-loop bands, the heard list cleared on restart, stale loop advice after a sweep) were fixed by /codefix and committed in e37e0ae; the fixes are present (`_heard_for` in kx3rig/smartscan/engine.py, `LoopTuner.refresh` and the "doesn't cover" refusal in kx3rig/looptune/tuner.py). 0 BLOCK, 51 NOTEs.*
+*Prior review (2026-10-12, commit 58c7e53): light review of the README tightening and the AlexLoop best-practice summary. 0 BLOCK, 0 WARN, 5 NOTEs; three (the 17 kHz figure, the missing faint-LED caveat, the session-count mismatch) are fixed in 9ec21fc, and two (the untested `LoopTuneDialog` claim, the stale confirm.png) remain.*
 
-<!-- REVIEW_META: {"date":"2026-10-12","commit":"58c7e53","reviewed_up_to":"58c7e53fb8394d5a0455cb9d9c5656af5402176b","base":"origin/main","tier":"light","block":0,"warn":0,"note":5} -->
+<!-- REVIEW_META: {"date":"2026-10-12","commit":"9ec21fc","reviewed_up_to":"9ec21fce7a6a1a122e5fa16ca9aed4f97d6ae15d","base":"origin/main","tier":"light","block":0,"warn":0,"note":4} -->
