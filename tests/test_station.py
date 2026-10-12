@@ -535,3 +535,33 @@ def test_good_swr_lets_the_transmission_finish(station):
     assert station.play_data(np.zeros(48_000 * 2, np.float32), 48_000, on_done=done.append).allowed
     assert pump(lambda: done, timeout=5)
     assert done == [True] and "swr" not in events
+
+
+def test_ft4_runs_through_the_same_engine(station, engine, monkeypatch):
+    from kx3rig import bandplan
+    from kx3rig.ft8.protocol import FT4
+
+    assert engine.set_protocol("FT4") and engine.proto is FT4 and engine.period == 7.5
+    station.tune_to(FT4.dial(bandplan.BY_NAME["20m"]))
+    assert pump(lambda: station.radio.frequency == 14_080_000)
+    assert engine.on_ft8_frequency().name == "20m"
+    monkeypatch.setattr(engine, "_wave", lambda text: np.zeros(4800, np.float32))
+    assert engine.call_cq().allowed
+    assert not engine.set_protocol("FT8")          # not while a contact is in progress
+    slot = 400 if engine.sequencer.tx_even else 401
+    engine._maybe_transmit(FT4.slot_start(slot) + FT4.tx_start_s)
+    assert engine.transmitting_text.startswith("CQ N0CALL")
+    engine.halt()
+    assert engine.set_protocol("FT8") and engine.settings.digital_mode == "FT8"
+
+
+def test_ft4_contacts_log_as_mfsk(station, engine, tmp_path):
+    from kx3rig.ft8 import adif
+    from kx3rig.ft8.sequencer import Contact
+
+    engine.set_protocol("FT4")
+    engine.sequencer.contact = Contact(call="W1AW", grid="FN31", report_sent=-5, report_rcvd=-9)
+    engine._log_contact()
+    text = open(engine.log_path).read()
+    assert "<mode:4>MFSK" in text and "<submode:3>FT4" in text
+    assert ("W1AW", "20m") in adif.worked(engine.log_path)

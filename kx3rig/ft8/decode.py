@@ -88,10 +88,12 @@ class Jt9:
 
     def decode(self, samples: np.ndarray, slot_start: float, my_call: str, *, dx_call: str = "",
                dx_grid: str = "", rx_freq: int = 1500, qso_progress: int = 0, depth: int = 2,
-               timeout: float = 12.0) -> list[RawDecode]:
+               timeout: float = 12.0, flag: str = "-8", parse=None) -> list[RawDecode]:
+        """flag is jt9's mode (-8 FT8, -5 FT4); parse reads its lines (FT4 marks them " + ")."""
+        parse = parse or parse_jt9_line
         path = os.path.join(self.workdir, wav_name(slot_start))
         write_wav(path, samples)
-        args = [JT9, "-8", "-d", str(depth), "-q", "-L", "200", "-H", "3000",
+        args = [JT9, flag, "-d", str(depth), "-q", "-L", "200", "-H", "3000",
                 "-f", str(int(rx_freq)), "-c", my_call or "b",
                 "-x", dx_call or "b", "-Q", str(int(qso_progress)),
                 "-a", self.workdir, "-t", self.workdir]
@@ -105,7 +107,7 @@ class Jt9:
                 os.remove(path)
             except OSError:
                 pass
-        decodes = [d for d in (parse_jt9_line(line) for line in out.splitlines()) if d]
+        decodes = [d for d in (parse(line) for line in out.splitlines()) if d]
         # jt9 can report the same message twice across passes; keep the first.
         seen: set[tuple[str, int]] = set()
         unique = []

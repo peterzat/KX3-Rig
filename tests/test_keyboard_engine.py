@@ -86,7 +86,7 @@ def test_long_messages_and_wrong_mode_are_refused(station, kb):
 def test_receives_psk31_and_cw(station, kb):
     got = []
     kb.connect("received", lambda e, t: got.append(t))
-    kb.start()
+    # Fed by hand, not start(): the demo's own audio would interleave with this.
     audio = psk31.demo_signal([("cq cq de W7PSK W7PSK k", 1000)], 12, snr_db=15, seed=1)
     for i in range(0, len(audio), 1200):
         kb._feed(audio[i:i + 1200], 0.0)

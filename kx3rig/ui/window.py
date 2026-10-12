@@ -81,7 +81,9 @@ class MainWindow(Adw.ApplicationWindow):
                                     self.looptune, self.open_loop_tune, self.toast_action)
         self.ft8_page = Ft8Page(self.station, self.engine, self.toast, self.confirm_transmit)
         self.stack.add_titled_with_icon(self.radio_page, "radio", "Radio", "kx3rig-transceiver-symbolic")
-        self.stack.add_titled_with_icon(self.ft8_page, "ft8", "FT8", "network-transmit-receive-symbolic")
+        ft8 = self.stack.add_titled_with_icon(self.ft8_page, "ft8", self.engine.proto.name,
+                                              "network-transmit-receive-symbolic")
+        self.ft8_page.on_title = ft8.set_title
         self.switcher = Adw.ViewSwitcher(stack=self.stack, policy=Adw.ViewSwitcherPolicy.WIDE)
         header.set_title_widget(self.switcher)
         header.pack_start(self._connection_button())

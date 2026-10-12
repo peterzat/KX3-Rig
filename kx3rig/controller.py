@@ -232,6 +232,13 @@ class Station(GObject.Object):
         self.settings.power_w = watts
         self.link.set_power(watts)
 
+    def go_dial(self, hz: int | None) -> None:
+        """Put the radio on a digital-mode dial frequency, DATA A."""
+        if hz is None or not self.connected or self.transmitting:
+            return
+        self.link.set_frequency(hz)
+        self.link.set_mode(Mode.DATA, DataSubmode.DATA_A)
+
     def go_ft8(self, band: bandplan.Band) -> None:
         """Put the radio on the FT8 dial frequency for a band, DATA A mode."""
         if not self.connected or self.transmitting:

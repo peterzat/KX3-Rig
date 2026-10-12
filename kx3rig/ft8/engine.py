@@ -8,7 +8,9 @@ Timing (one 15 s period):
     13.4 s  snapshot the period's audio and start jt9 (about 1.5 s on this CPU)
     ~14.9 s decodes ready: the sequencer chooses the next message in time for
             the next period's 0.5 s start; if late, the start of the waveform
-            is skipped (as WSJT-X does) up to MAX_LATE_S.
+            is skipped (as WSJT-X does) up to the protocol's max_late_s.
+
+FT4 (protocol.py) runs through the same engine with 7.5 s periods.
 """
 
 from __future__ import annotations
@@ -28,19 +30,17 @@ from gi.repository import GLib, GObject  # noqa: E402
 from .. import bandplan, config  # noqa: E402
 from ..cat import DataSubmode, Mode  # noqa: E402
 from . import adif, encode  # noqa: E402
-from .decode import PERIOD, Jt9, SlotRecorder, slot_of, slot_start  # noqa: E402
+from .decode import Jt9, SlotRecorder, slot_of, slot_start  # noqa: E402,F401  (FT8 slots, for tests)
 from .messages import parse  # noqa: E402
+from .protocol import FT8, PROTOCOLS, Protocol  # noqa: E402
 from .sequencer import Decode, Sequencer, Stage  # noqa: E402
 
 log = logging.getLogger(__name__)
 
-DECODE_AT_S = 13.4
 TX_RATE = 48_000
-TX_START_S = 0.5
+TX_START_S = FT8.tx_start_s
 PTT_LEAD_S = 0.25         # key the radio this long before audio starts
 OUTPUT_LATENCY_S = 0.04   # PipeWire stream start-up (measured ~10 ms), compensated in the lead silence
-MAX_LATE_S = 3.0
-SIGNAL_WIDTH_HZ = 50
 TUNE_SECONDS = 10.0
 REFUSAL_LIMIT = 10        # ticks (100 ms each) of refused key-down before a contact stops
 QSO_PROGRESS = {          # jt9 -Q: which a-priori decoding types to try
@@ -65,6 +65,7 @@ class Ft8Engine(GObject.Object):
         self.station = station
         self.settings: config.Settings = station.settings
         self.demo = demo
+        self.proto: Protocol = PROTOCOLS.get(getattr(self.settings, "digital_mode", "FT8"), FT8)
         self.recorder = SlotRecorder()
         self.jt9 = Jt9(os.path.join(config.data_dir(), "jt9"))
         # Demo contacts are simulated: keep them out of the real logbook.
@@ -75,6 +76,8 @@ class Ft8Engine(GObject.Object):
         self.transmitting_text = ""
         self.tuning = False
         self.logged_count = adif.count(self.log_path)
+        self.worked: set[tuple[str, str]] = adif.worked(self.log_path)
+        self.grids: dict[str, str] = {}        # call -> last grid heard, for distance on every line
         self._last_decode_slot = -1
         self._decoding_slot: int | None = None
         self._tx_slots: set[int] = set()
@@ -111,12 +114,30 @@ class Ft8Engine(GObject.Object):
         return self.sequencer.active or self.tuning or bool(self.transmitting_text)
 
     def on_ft8_frequency(self) -> bandplan.Band | None:
-        """The band whose FT8 dial the radio is on, if any."""
+        """The band whose FT8 (or FT4) dial the radio is on, if any."""
         st = self.station.radio
-        band = bandplan.band_for(st.frequency)
-        if band and abs(st.frequency - band.ft8) < 500 and st.mode is Mode.DATA:
-            return band
-        return None
+        if st.mode is not Mode.DATA:
+            return None
+        return self.proto.band_on_dial(st.frequency)
+
+    def set_protocol(self, name: str) -> bool:
+        """Switch between FT8 and FT4. Refused while a contact or tune is in progress."""
+        proto = PROTOCOLS.get(name)
+        if proto is None or self.busy:
+            return False
+        if proto is not self.proto:
+            self.proto = proto
+            self.settings.digital_mode = name
+            self.decodes.clear()
+            self._wave_cache.clear()
+            self._last_decode_slot = -1
+            self.sequencer = Sequencer(self.settings.callsign, self.settings.grid4)
+            self.emit("contact-changed")
+        return True
+
+    @property
+    def period(self) -> float:
+        return self.proto.period
 
     # --- operator actions -------------------------------------------------------------------
 
@@ -131,7 +152,7 @@ class Ft8Engine(GObject.Object):
         if sub is not DataSubmode.DATA_A:
             # Other submodes change sideband and audio handling (KX3 Owner's Manual p.18).
             return bandplan.TxCheck(False, "Set the KX3's data submode to DATA A. Tune Radio to FT8 does this.")
-        return self.station.can_transmit(Mode.DATA, self.tx_offset, self.tx_offset + SIGNAL_WIDTH_HZ)
+        return self.station.can_transmit(Mode.DATA, self.tx_offset, self.tx_offset + self.proto.signal_width_hz)
 
     def answer(self, decode: Decode) -> bandplan.TxCheck:
         check = self.check_tx()
@@ -152,7 +173,8 @@ class Ft8Engine(GObject.Object):
         self.sequencer = Sequencer(self.settings.callsign, self.settings.grid4)
         self._refusals = 0
         now = time.time()
-        upcoming = slot_of(now) + (1 if now - slot_start(slot_of(now)) > MAX_LATE_S else 0)
+        p = self.proto
+        upcoming = p.slot_of(now) + (1 if now - p.slot_start(p.slot_of(now)) > p.max_late_s else 0)
         self.sequencer.call_cq(tx_even=upcoming % 2 == 0)
         self._pick_clear_offset()
         self.emit("contact-changed")
@@ -200,10 +222,11 @@ class Ft8Engine(GObject.Object):
     def _pick_clear_offset(self) -> None:
         """Keep our TX offset unless someone is on it; then move to the nearest gap."""
         recent = [d for slot in sorted(self.decodes)[-4:] for d in self.decodes[slot]]
-        busy = [(d.freq - 10, d.freq + SIGNAL_WIDTH_HZ + 10) for d in recent]
+        width = self.proto.signal_width_hz
+        busy = [(d.freq - 10, d.freq + width + 10) for d in recent]
 
         def clear(f: int) -> bool:
-            return all(f + SIGNAL_WIDTH_HZ < lo or f > hi for lo, hi in busy)
+            return all(f + width < lo or f > hi for lo, hi in busy)
 
         if clear(self.tx_offset):
             return
@@ -220,15 +243,16 @@ class Ft8Engine(GObject.Object):
             self.halt()
             self.emit("event", "blocked", "Contact stopped: the radio disconnected.")
         now = time.time()
-        slot = slot_of(now)
-        t_in = now - slot_start(slot)
+        p = self.proto
+        slot = p.slot_of(now)
+        t_in = now - p.slot_start(slot)
         seq = self.sequencer
         if seq.wait_expired(slot):
             who = seq.contact.call if seq.contact else "anyone"
             seq.halt()
             self.emit("event", "gave-up", f"{who} didn't come back. Stopped waiting.")
             self.emit("contact-changed")
-        if t_in >= DECODE_AT_S and self._last_decode_slot != slot:
+        if t_in >= p.decode_at_s and self._last_decode_slot != slot:
             self._last_decode_slot = slot
             if self.listening and slot not in self._tx_slots and self._decoding_slot is None:
                 self._start_decode(slot)
@@ -237,8 +261,11 @@ class Ft8Engine(GObject.Object):
 
     def _start_decode(self, slot: int) -> None:
         if not Jt9.available():
+            if self.demo:
+                self._demo_decode(slot)
             return
-        samples, present = self.recorder.extract(slot_start(slot), PERIOD)
+        p = self.proto
+        samples, present = self.recorder.extract(p.slot_start(slot), p.decode_seconds)
         if present < 0.6:
             return
         seq = self.sequencer
@@ -251,22 +278,42 @@ class Ft8Engine(GObject.Object):
         )
         self._decoding_slot = slot
         my_call = self.settings.callsign
+        kwargs["proto"] = p
         threading.Thread(target=self._decode_worker, args=(slot, samples, my_call, kwargs),
                          name="jt9", daemon=True).start()
 
+    def _demo_decode(self, slot: int) -> None:
+        """Demo mode without WSJT-X (for example on a Mac): report the simulated
+        band's messages as if jt9 had decoded them, so the view can be reviewed."""
+        from .. import ft8 as pkg
+        from .decode import RawDecode
+
+        raw = [RawDecode("000000", int(round(snr)), 0.1, int(round(freq)), text, False, "")
+               for text, freq, snr in pkg.demo_messages(slot)]
+        GLib.idle_add(self._on_decoded, slot, raw, self.proto)
+
     def _decode_worker(self, slot, samples, my_call, kwargs) -> None:
         try:
-            raw = self.jt9.decode(samples, slot_start(slot), my_call, **kwargs)
+            p = kwargs.pop("proto")
+            raw = self.jt9.decode(samples, p.slot_start(slot), my_call, flag=p.jt9_flag, parse=p.parse,
+                                  **kwargs)
         except Exception as exc:
             log.warning("jt9 failed: %s", exc)
             raw = []
-        GLib.idle_add(self._on_decoded, slot, raw)
+        GLib.idle_add(self._on_decoded, slot, raw, p)
 
-    def _on_decoded(self, slot: int, raw) -> bool:
+    def _on_decoded(self, slot: int, raw, proto: Protocol | None = None) -> bool:
         self._decoding_slot = None
+        if proto is not None and proto is not self.proto:
+            return False   # decoded under the other protocol: the slots no longer line up
         decodes = [Decode(slot=slot, snr=r.snr, dt=r.dt, freq=r.freq, text=r.message,
                           message=parse(r.message), low_confidence=r.low_confidence) for r in raw]
         decodes.sort(key=lambda d: d.freq)
+        for d in decodes:
+            if d.message.grid and d.message.de and not d.low_confidence:
+                self.grids[d.message.de.strip("<>")] = d.message.grid
+        if len(self.grids) > 2000:
+            self.grids = dict(list(self.grids.items())[-1000:])
         self.decodes[slot] = decodes
         for old in [s for s in self.decodes if s < slot - 40]:
             del self.decodes[old]
@@ -296,11 +343,12 @@ class Ft8Engine(GObject.Object):
         seq = self.sequencer
         if not seq.active or self.transmitting_text or self.station.data_transmitting:
             return
-        slot = slot_of(now)
-        t_in = now - slot_start(slot)
+        p = self.proto
+        slot = p.slot_of(now)
+        t_in = now - p.slot_start(slot)
         if (slot % 2 == 0) != seq.tx_even or slot in self._tx_slots:
             return
-        if t_in < TX_START_S - PTT_LEAD_S or t_in > MAX_LATE_S:
+        if t_in < p.tx_start_s - PTT_LEAD_S or t_in > p.max_late_s:
             return
         if self._decoding_slot == slot - 1:
             return  # the reply depends on what was just heard; wait for jt9
@@ -320,7 +368,7 @@ class Ft8Engine(GObject.Object):
             self.halt()
             self.emit("event", "error", str(exc))
             return
-        audio_at = slot_start(slot) + TX_START_S
+        audio_at = p.slot_start(slot) + p.tx_start_s
         lead = audio_at - now - OUTPUT_LATENCY_S
         if lead >= 0:
             samples = np.concatenate([np.zeros(int(lead * TX_RATE), np.float32), wave])
@@ -329,7 +377,7 @@ class Ft8Engine(GObject.Object):
         self._tx_slots.add(slot)
         self._tx_slots = {s for s in self._tx_slots if s > slot - 10}
         result = self.station.play_data(samples, TX_RATE, on_done=lambda ok, s=seq, t=text: self._tx_done(s, t, ok),
-                                        limit_s=PERIOD)
+                                        limit_s=p.period)
         if not result.allowed:
             if not result.retry:
                 # Not transient (for example the audio failed after keying): stop now.
@@ -354,12 +402,12 @@ class Ft8Engine(GObject.Object):
         self.emit("transmitting", True, text)
 
     def _wave(self, text: str) -> np.ndarray:
-        key = (text, self.tx_offset)
+        key = (self.proto.name, text, self.tx_offset)
         if key not in self._wave_cache:
             if len(self._wave_cache) > 16:
                 self._wave_cache.clear()
-            tones = encode.encode(text).tones
-            self._wave_cache[key] = encode.waveform(tones, TX_RATE, self.tx_offset)
+            tones = self.proto.tones(text)
+            self._wave_cache[key] = self.proto.waveform(tones, TX_RATE, self.tx_offset)
         return self._wave_cache[key]
 
     def _tx_done(self, seq: Sequencer, text: str, ok: bool = True) -> None:
@@ -383,7 +431,7 @@ class Ft8Engine(GObject.Object):
         elif seq.should_give_up():
             who = seq.contact.call if seq.contact else "anyone"
             if seq.can_wait():
-                seq.start_waiting(slot_of(time.time()))
+                seq.start_waiting(self.proto.slot_of(time.time()))
                 self.emit("event", "waiting", f"No answer from {who}. Waiting in case they come back.")
             else:
                 seq.halt()
@@ -401,6 +449,7 @@ class Ft8Engine(GObject.Object):
             time_on=c.time_on or datetime.now(timezone.utc), time_off=c.time_off or datetime.now(timezone.utc),
             band=band.name if band else "", dial_hz=st.frequency, station_call=self.settings.callsign,
             my_grid=self.settings.grid, tx_power_w=st.power_set,
+            mode=self.proto.adif_mode, submode=self.proto.adif_submode,
         )
         try:
             adif.append(self.log_path, entry)
@@ -408,6 +457,7 @@ class Ft8Engine(GObject.Object):
             self.emit("event", "error", f"Could not write the log: {exc}")
             return
         self.logged_count += 1
+        self.worked.add((entry.call.upper(), entry.band))
         self.emit("logged", entry)
 
     def _finish_contact(self) -> None:

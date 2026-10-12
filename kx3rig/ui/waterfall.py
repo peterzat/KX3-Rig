@@ -94,6 +94,8 @@ class Waterfall(Gtk.Widget):
         "offset-clicked": (GObject.SignalFlags.RUN_FIRST, None, (float, bool)),
         # Scroll over the waterfall: +1 / -1 steps.
         "scroll-tune": (GObject.SignalFlags.RUN_FIRST, None, (int,)),
+        # A callsign label was double-clicked: its payload (for example an FT8 decode).
+        "label-activated": (GObject.SignalFlags.RUN_FIRST, None, (object,)),
     }
 
     def __init__(self, station, span_hz: float = 3500.0, palette: str = "blue"):
@@ -116,6 +118,11 @@ class Waterfall(Gtk.Widget):
         # Smartscan findings: (t_start, t_end, low_hz, high_hz, kind), drawn
         # around the signal in the scrolling history so they move with it.
         self.marks: list[tuple[float, float, float, float, str]] = []
+        # Callsigns at the frequency they were heard in the latest period (after WSJT-X
+        # Improved, by DG2YCB), in lanes under the trace so they never overlap:
+        # (wall time, audio Hz, text, kind, payload); kind is "cq", "me", "partner", or "".
+        self.labels: list[tuple[float, float, str, str, object]] = []
+        self._label_rects: list[tuple[Graphene.Rect, object]] = []
         self.rows_per_second = station.spectrum.sample_rate / station.spectrum.hop
         self._img: np.ndarray | None = None
         self._row = 0
@@ -304,6 +311,9 @@ class Waterfall(Gtk.Widget):
 
         if self.marks:
             self._draw_marks(snap, w, h, trace_h, accent)
+        self._label_rects = []
+        if self.labels:
+            self._draw_labels(snap, w, h, trace_h)
 
         if self._hover_x is not None:
             hover = Gdk.RGBA()
@@ -345,6 +355,58 @@ class Waterfall(Gtk.Widget):
                 snap.append_layout(layout, color)
                 snap.restore()
 
+    def set_labels(self, labels: list[tuple[float, float, str, str, object]]) -> None:
+        self.labels = sorted(labels, key=lambda lab: lab[1])
+        self.queue_draw()
+
+    def _draw_labels(self, snap, w, h, trace_h) -> None:
+        layout = self.create_pango_layout("")
+        lanes: list[float] = []      # right edge of the last label in each lane
+        styles = {
+            "cq": (self._color("success_bg_color", "#2ec27e"), self._color("success_fg_color", "#ffffff")),
+            "partner": (self._color("error_bg_color", "#e01b24"), self._color("error_fg_color", "#ffffff")),
+            "me": (self._color("warning_bg_color", "#e5a50a"), self._color("warning_fg_color", "#000000")),
+        }
+        fg = self.get_color()
+        for t, hz, text, kind, payload in self.labels:
+            layout.set_markup(f"<small>{GLib.markup_escape_text(text)}</small>", -1)
+            tw, th = layout.get_pixel_size()
+            x = max(2.0, min(w - tw - 10, self._x_for(hz)))
+            lane = next((i for i, right in enumerate(lanes) if right + 4 <= x), len(lanes))
+            y = trace_h + 4 + lane * (th + 5)
+            if y + th + 2 > h:
+                continue
+            if lane == len(lanes):
+                lanes.append(0.0)
+            lanes[lane] = x + tw + 8
+            rect = Graphene.Rect().init(x, y, tw + 8, th + 2)
+            bg, color = styles.get(kind, (None, fg))
+            box = Gsk.RoundedRect()
+            box.init_from_rect(rect, 4)
+            if bg is None:
+                bg = Gdk.RGBA()
+                bg.red, bg.green, bg.blue, bg.alpha = 0, 0, 0, 0.45
+                color = Gdk.RGBA()
+                color.parse("#ffffff")
+            snap.push_rounded_clip(box)
+            snap.append_color(bg, rect)
+            snap.pop()
+            snap.save()
+            point = Graphene.Point()
+            point.x, point.y = x + 4, y + 1
+            snap.translate(point)
+            snap.append_layout(layout, color)
+            snap.restore()
+            self._label_rects.append((rect, payload))
+
+    def _label_at(self, x: float, y: float):
+        point = Graphene.Point()
+        point.x, point.y = x, y
+        for rect, payload in reversed(self._label_rects):
+            if rect.contains_point(point):
+                return payload
+        return None
+
     def _marker(self, snap, hz, color, h, trace_h, solid) -> None:
         x0 = self._x_for(hz)
         x1 = self._x_for(hz + self.marker_width_hz)
@@ -369,6 +431,12 @@ class Waterfall(Gtk.Widget):
         self.queue_draw()
 
     def _on_click(self, gesture, n_press, x, y) -> None:
+        payload = self._label_at(x, y)
+        if payload is not None:
+            # A label is not a place to move the transmit offset; a double-click acts on it.
+            if n_press == 2:
+                self.emit("label-activated", payload)
+            return
         state = gesture.get_current_event_state()
         shift = bool(state & Gdk.ModifierType.SHIFT_MASK)
         self.emit("offset-clicked", self._hz_for(x), shift)

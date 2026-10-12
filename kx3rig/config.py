@@ -51,6 +51,8 @@ class Settings:
     listen: bool = True
     # The operator has seen Loop Tune's one-time KX3 settings (TUN PWR, ATU MD).
     loop_setup_seen: bool = False
+    # FT8 or FT4 in the FT8 view.
+    digital_mode: str = "FT8"
 
     @property
     def grid4(self) -> str:
@@ -60,12 +62,14 @@ class Settings:
     def clamp(self) -> None:
         defaults = Settings.__dataclass_fields__
         # Hand-edited files can hold nulls, NaN, or the wrong types; those fall back.
-        for name in ("callsign", "grid", "license_class", "serial_port"):
+        for name in ("callsign", "grid", "license_class", "serial_port", "digital_mode"):
             if not isinstance(getattr(self, name), str):
                 setattr(self, name, defaults[name].default)
         for name in ("listen", "loop_setup_seen"):
             if not isinstance(getattr(self, name), bool):
                 setattr(self, name, defaults[name].default)
+        if self.digital_mode not in ("FT8", "FT4"):
+            self.digital_mode = "FT8"
         if self.license_class not in LICENSE_CLASSES:
             self.license_class = "Technician"
         for name in ("power_w", "max_power_w", "listen_volume", "voice_gain", "data_tx_level"):

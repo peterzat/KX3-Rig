@@ -1,6 +1,8 @@
-"""The FT8 view: watch the band, answer a CQ, or call CQ.
+"""The FT8 view (FT8 or FT4): watch the band, answer a CQ, or call CQ.
 
-Left: setup strip (band, clock and cycle), waterfall, and the decode list.
+Left: setup strip (mode, band, clock and cycle), waterfall with the callsigns
+heard, and the decode list with distance, filters, and "New" for stations not
+in the log.
 Right: the contact panel, which reads like a conversation while a contact is
 in progress and offers "Call CQ", transmit level, and Tune when idle.
 """
@@ -15,19 +17,20 @@ import gi
 gi.require_version("Gtk", "4.0")
 gi.require_version("Gdk", "4.0")
 gi.require_version("Adw", "1")
-from gi.repository import Adw, GLib, Gtk, Pango  # noqa: E402
+from gi.repository import Adw, Gdk, GLib, Gtk, Pango  # noqa: E402
 
 from .. import bandplan  # noqa: E402
 from ..cat import DataSubmode, Mode  # noqa: E402
 from ..ft8 import grid as grids  # noqa: E402
-from ..ft8.decode import PERIOD, slot_of, slot_start  # noqa: E402
 from ..ft8.engine import Ft8Engine  # noqa: E402
+from ..ft8.filters import DecodeFilter  # noqa: E402
+from ..ft8.messages import base_call  # noqa: E402
+from ..ft8.protocol import FT4, FT8  # noqa: E402
 from ..ft8.sequencer import Decode, Stage  # noqa: E402
 from ..radio import Link  # noqa: E402
 from .waterfall import FrequencyAxis, Waterfall  # noqa: E402
 
 MAX_ROWS = 400
-FT8_BANDS = [b for b in bandplan.BANDS if b.name != "60m"]
 
 
 def _label(text: str = "", *classes: str, **kw) -> Gtk.Label:
@@ -37,12 +40,18 @@ def _label(text: str = "", *classes: str, **kw) -> Gtk.Label:
     return lbl
 
 
-def _utc(slot: int) -> str:
-    return datetime.fromtimestamp(slot_start(slot), timezone.utc).strftime("%H:%M:%S")
+def _mhz(hz: int) -> str:
+    """14.074, 7.0475: at least three decimals, no trailing zeros beyond them."""
+    text = f"{hz / 1e6:.4f}"
+    return text[:-1] if text.endswith("0") else text
+
+
+def _utc(t: float) -> str:
+    return datetime.fromtimestamp(t, timezone.utc).strftime("%H:%M:%S")
 
 
 class DecodeRow(Gtk.ListBoxRow):
-    def __init__(self, d: Decode, my_call: str, on_answer):
+    def __init__(self, d: Decode, my_call: str, on_answer, where: str = "", new: bool = False, on_hide=None):
         super().__init__()
         self.decode = d
         msg = d.message
@@ -62,6 +71,11 @@ class DecodeRow(Gtk.ListBoxRow):
         if to_me:
             box.add_css_class("me")
             box.append(_label("You", "tag", "me", "small", "caption-heading", valign=Gtk.Align.CENTER))
+        if new:
+            box.append(_label("New", "tag", "new", "small", "caption-heading", valign=Gtk.Align.CENTER,
+                              tooltip_text="Not in your log on this band"))
+        if where:
+            box.append(_label(where, "caption", "numeric", "dim-label", valign=Gtk.Align.CENTER))
         if d.low_confidence:
             box.append(_label("?", "dim-label", tooltip_text="Low-confidence decode"))
         self.can_answer = bool(msg.de and msg.de != "<...>" and (msg.is_cq or to_me))
@@ -77,6 +91,24 @@ class DecodeRow(Gtk.ListBoxRow):
             box.append(spacer)
         self.set_child(box)
         self.set_activatable(self.can_answer)
+        if on_hide is not None and msg.de and msg.de != "<...>":
+            call = base_call(msg.de)
+            menu = Gtk.GestureClick(button=3)
+            menu.connect("pressed", lambda g, n, x, y: self._offer_hide(call, on_hide, x, y))
+            self.add_controller(menu)
+
+    def _offer_hide(self, call: str, on_hide, x: float, y: float) -> None:
+        pop = Gtk.Popover(has_arrow=True)
+        pop.set_parent(self)
+        rect = Gdk.Rectangle()
+        rect.x, rect.y, rect.width, rect.height = int(x), int(y), 1, 1
+        pop.set_pointing_to(rect)
+        btn = Gtk.Button(label=f"Hide {call}")
+        btn.add_css_class("flat")
+        btn.connect("clicked", lambda b: (pop.popdown(), on_hide(call)))
+        pop.set_child(btn)
+        pop.connect("closed", lambda p: GLib.idle_add(p.unparent))
+        pop.popup()
 
 
 class Bubble(Gtk.Box):
@@ -107,6 +139,8 @@ class Ft8Page(Gtk.Box):
         self.confirm_tx = confirm_tx       # callable(action) -> runs action after first-TX confirmation
         self._row_count = 0
         self._conversation_key = None
+        self.filter = DecodeFilter()
+        self.on_title = None               # set by the window: the view's title follows FT8/FT4
 
         self.split = Adw.OverlaySplitView(sidebar_position=Gtk.PackType.END, max_sidebar_width=380,
                                           min_sidebar_width=300, sidebar_width_fraction=0.34)
@@ -117,6 +151,7 @@ class Ft8Page(Gtk.Box):
         self.split.set_vexpand(True)
         self.append(self.split)
 
+        self.list.set_filter_func(self._filter_row)
         engine.connect("decoded", lambda e, slot, ds: self._on_decoded(slot, ds))
         engine.connect("contact-changed", lambda e: self._refresh_panel())
         engine.connect("transmitting", lambda e, on, text: self._on_transmitting(on, text))
@@ -134,9 +169,23 @@ class Ft8Page(Gtk.Box):
                       margin_start=12, margin_end=12)
 
         strip = Gtk.Box(spacing=12)
-        self.band_dd = Gtk.DropDown.new_from_strings([f"{b.label}  ·  {b.ft8 / 1e6:.3f} MHz" for b in FT8_BANDS])
-        self.band_dd.set_tooltip_text("FT8 Band")
-        self.band_dd.set_selected(next(i for i, b in enumerate(FT8_BANDS) if b.name == "20m"))
+        modes = Gtk.Box(valign=Gtk.Align.CENTER)
+        modes.add_css_class("linked")
+        self.mode_buttons = {}
+        for proto, tip in ((FT8, "15-second periods: the most activity"),
+                           (FT4, "7.5-second periods: faster contacts, popular in contests")):
+            b = Gtk.ToggleButton(label=proto.name, tooltip_text=tip)
+            if self.mode_buttons:
+                b.set_group(next(iter(self.mode_buttons.values())))
+            b.set_active(self.engine.proto is proto)
+            b.connect("toggled", self._on_mode_toggled, proto.name)
+            self.mode_buttons[proto.name] = b
+            modes.append(b)
+        strip.append(modes)
+        self.band_model = Gtk.StringList()
+        self.band_dd = Gtk.DropDown(model=self.band_model)
+        self.band_dd.set_tooltip_text("Band")
+        self._fill_bands()
         self.band_dd.connect("notify::selected", self._on_band_selected)
         strip.append(self.band_dd)
         self.setup_button = Gtk.Button(label="Tune Radio to FT8")
@@ -174,6 +223,7 @@ class Ft8Page(Gtk.Box):
         self.waterfall.marker_width_hz = 50
         self.waterfall.describe_offset = lambda hz: f"{hz:.0f} Hz  ·  click to transmit here"
         self.waterfall.connect("offset-clicked", lambda w, hz, shift: self._set_offset(hz))
+        self.waterfall.connect("label-activated", lambda w, d: getattr(d, "message", None) and self._answer(d))
         axis = FrequencyAxis(self.waterfall)
         axis.labeler = lambda hz: f"{hz:.0f}"
         wf_box.append(self.waterfall)
@@ -186,13 +236,14 @@ class Ft8Page(Gtk.Box):
         header.append(_label("Message", "caption-heading", "dim-label", xalign=0, hexpand=True))
         self.decode_count = _label("", "caption", "dim-label", xalign=1)
         header.append(self.decode_count)
+        header.append(self._build_filter_button())
         box.append(header)
 
         self.list = Gtk.ListBox(selection_mode=Gtk.SelectionMode.NONE, activate_on_single_click=False)
         self.list.add_css_class("decode-list")
         self.list.connect("row-activated", lambda lb, row: getattr(row, "can_answer", False) and self._answer(row.decode))
         self.empty = Adw.StatusPage(icon_name="network-receive-symbolic", title="Listening…",
-                                    description="Decodes appear after each 15-second cycle")
+                                    description="Decodes appear after each cycle")
         self.empty.add_css_class("compact")
         self.list.set_placeholder(self.empty)
         self.scroller = Gtk.ScrolledWindow(hscrollbar_policy=Gtk.PolicyType.NEVER, vexpand=True)
@@ -203,6 +254,136 @@ class Ft8Page(Gtk.Box):
         card.set_child(self.scroller)
         box.append(card)
         return box
+
+    def _build_filter_button(self) -> Gtk.Widget:
+        button = Gtk.MenuButton(label="Filter", valign=Gtk.Align.CENTER, tooltip_text="Choose Which Decodes to Show")
+        button.add_css_class("flat")
+        button.add_css_class("caption")
+        pop = Gtk.Popover()
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2, margin_top=6, margin_bottom=6,
+                      margin_start=6, margin_end=6)
+        for attr, title in (("cq_only", "CQs Only"), ("hide_worked", "Hide Stations in the Log"),
+                            ("hide_doubtful", "Hide Doubtful Decodes")):
+            check = Gtk.CheckButton(label=title, active=getattr(self.filter, attr))
+            check.connect("toggled", self._on_filter_toggled, attr)
+            box.append(check)
+        self.unhide_button = Gtk.Button(label="Show Hidden Stations", sensitive=False, margin_top=6)
+        self.unhide_button.add_css_class("flat")
+        self.unhide_button.connect("clicked", lambda b: self._unhide())
+        box.append(self.unhide_button)
+        box.append(_label("Messages to you are always shown. Right-click a decode to hide that station.",
+                          "caption", "dim-label", wrap=True, max_width_chars=28, xalign=0, margin_top=6))
+        pop.set_child(box)
+        button.set_popover(pop)
+        self.filter_button = button
+        return button
+
+    def _on_filter_toggled(self, check, attr: str) -> None:
+        setattr(self.filter, attr, check.get_active())
+        self._refilter()
+
+    def _hide_call(self, call: str) -> None:
+        self.filter.hidden_calls.add(call)
+        self._refilter()
+        self.toast(f"{call} hidden for this session")
+
+    def _unhide(self) -> None:
+        self.filter.hidden_calls.clear()
+        self._refilter()
+
+    def _refilter(self) -> None:
+        f = self.filter
+        active = f.cq_only or f.hide_worked or bool(f.hidden_calls)
+        self.filter_button.set_label("Filter On" if active else "Filter")
+        self.unhide_button.set_sensitive(bool(f.hidden_calls))
+        n = len(f.hidden_calls)
+        self.unhide_button.set_label(f"Show {n} Hidden Station{'s' if n != 1 else ''}" if n else "Show Hidden Stations")
+        self.list.invalidate_filter()
+        self._update_labels()
+
+    def _filter_row(self, row) -> bool:
+        d = getattr(row, "decode", None)
+        if d is None:
+            return True
+        return self.filter.shows(d, self.station.settings.callsign, self.engine.worked, self._band_name())
+
+    def _band_name(self) -> str:
+        band = bandplan.band_for(self.station.radio.frequency)
+        return band.name if band else ""
+
+    def _where(self, d: Decode) -> str:
+        call = d.message.de.strip("<>") if d.message.de else ""
+        grid = d.message.grid or self.engine.grids.get(call, "")
+        mine = self.station.settings.grid
+        if not grid or not mine:
+            return ""
+        dist = grids.distance_km(mine, grid)
+        bearing = grids.bearing_deg(mine, grid)
+        if dist is None or bearing is None:
+            return ""
+        return f"{dist:,.0f} km {grids.compass(bearing)}"
+
+    def _is_new(self, d: Decode) -> bool:
+        call = base_call(d.message.de) if d.message.de and d.message.de != "<...>" else ""
+        return bool(call) and (d.message.is_cq or d.message.addressed_to(self.station.settings.callsign)) and \
+            (call, self._band_name()) not in self.engine.worked
+
+    def _update_labels(self) -> None:
+        """Callsigns over the waterfall, where each was heard in the latest periods."""
+        p = self.engine.proto
+        me = self.station.settings.callsign
+        c = self.engine.sequencer.contact
+        labels = []
+        for slot in sorted(self.engine.decodes)[-1:]:
+            t_end = p.slot_start(slot) + p.decode_seconds
+            for d in self.engine.decodes[slot]:
+                m = d.message
+                if not m.de or m.de == "<...>":
+                    continue
+                if not self.filter.shows(d, me, self.engine.worked, self._band_name()):
+                    continue
+                if c is not None and base_call(m.de) == base_call(c.call):
+                    kind = "partner"
+                elif m.addressed_to(me):
+                    kind = "me"
+                elif m.is_cq:
+                    kind = "cq"
+                else:
+                    kind = ""
+                labels.append((t_end - 1.0, d.freq, m.de.strip("<>"), kind, d))
+        self.waterfall.set_labels(labels)
+
+    # --- FT8 or FT4 ---------------------------------------------------------------------------
+
+    def _bands(self) -> list[bandplan.Band]:
+        return self.engine.proto.bands
+
+    def _fill_bands(self) -> None:
+        self._syncing = True
+        p = self.engine.proto
+        current = self._band_name() or "20m"
+        self.band_model.splice(0, self.band_model.get_n_items(),
+                               [f"{b.label}  ·  {_mhz(p.dial(b))} MHz" for b in self._bands()])
+        names = [b.name for b in self._bands()]
+        self.band_dd.set_selected(names.index(current) if current in names else names.index("20m"))
+        self._syncing = False
+
+    def _on_mode_toggled(self, button, name: str) -> None:
+        if not button.get_active() or self.engine.proto.name == name:
+            return
+        if not self.engine.set_protocol(name):
+            self.toast("Stop the current contact before switching between FT8 and FT4")
+            self.mode_buttons[self.engine.proto.name].set_active(True)
+            return
+        self._fill_bands()
+        self.waterfall.marker_width_hz = self.engine.proto.signal_width_hz
+        self._clear_list()
+        if callable(self.on_title):
+            self.on_title(name)
+        # Follow onto the new mode's dial when the radio was on the old one.
+        if self.station.connected and bandplan.band_for(self.station.radio.frequency):
+            self._tune_to_ft8()
+        self._refresh_setup()
 
     # --- contact panel ----------------------------------------------------------------------
 
@@ -281,7 +462,7 @@ class Ft8Page(Gtk.Box):
     # --- actions ---------------------------------------------------------------------------
 
     def _selected_band(self) -> bandplan.Band:
-        return FT8_BANDS[self.band_dd.get_selected()]
+        return self._bands()[min(self.band_dd.get_selected(), len(self._bands()) - 1)]
 
     def _on_band_selected(self, dd, _pspec) -> None:
         if getattr(self, "_syncing", False):
@@ -293,7 +474,8 @@ class Ft8Page(Gtk.Box):
         if self.engine.busy:
             self.toast("Stop the current contact before changing band")
             return
-        self.station.go_ft8(self._selected_band())
+        band = self._selected_band()
+        self.station.go_dial(self.engine.proto.dial(band))
         self._clear_list()
 
     def _set_offset(self, hz: float) -> None:
@@ -343,13 +525,15 @@ class Ft8Page(Gtk.Box):
         at_bottom = adj.get_value() >= adj.get_upper() - adj.get_page_size() - 40
         if decodes or self._row_count:
             sep = Gtk.ListBoxRow(activatable=False, selectable=False)
-            text = f"{_utc(slot)}  ·  {len(decodes)} decode{'s' if len(decodes) != 1 else ''}"
+            text = f"{_utc(self.engine.proto.slot_start(slot))}  ·  {len(decodes)} decode{'s' if len(decodes) != 1 else ''}"
             sep.set_child(_label(text, "caption-heading", "dim-label", xalign=0, margin_top=8, margin_start=12))
             self.list.append(sep)
             self._row_count += 1
         for d in decodes:
-            self.list.append(DecodeRow(d, self.station.settings.callsign, self._answer))
+            self.list.append(DecodeRow(d, self.station.settings.callsign, self._answer, self._where(d),
+                                       self._is_new(d), self._hide_call))
             self._row_count += 1
+        self._update_labels()
         while self._row_count > MAX_ROWS:
             first = self.list.get_row_at_index(0)
             if first is None:
@@ -394,7 +578,7 @@ class Ft8Page(Gtk.Box):
         self.band_dd.set_sensitive(connected)
         if on_ft8 is not None:
             self._syncing = True
-            idx = next((i for i, b in enumerate(FT8_BANDS) if b.name == on_ft8.name), None)
+            idx = next((i for i, b in enumerate(self._bands()) if b.name == on_ft8.name), None)
             if idx is not None and idx != self.band_dd.get_selected():
                 self.band_dd.set_selected(idx)
             self._syncing = False
@@ -405,13 +589,15 @@ class Ft8Page(Gtk.Box):
         elif st.mode is not Mode.DATA:
             self.status.set_label("The radio isn't in DATA mode")
         elif on_ft8 is None:
-            self.status.set_label(f"Listening on {st.frequency / 1e6:.3f} MHz (not an FT8 frequency)")
+            self.status.set_label(f"Listening on {st.frequency / 1e6:.3f} MHz "
+                                  f"(not an {self.engine.proto.name} frequency)")
         else:
             self.status.set_label(f"Listening on {on_ft8.label}")
         self.empty.set_title("Listening…" if self.engine.listening else "Not Listening")
+        p = self.engine.proto
         self.empty.set_description(
-            "Decodes appear after each 15-second cycle" if self.engine.listening
-            else "Tune the radio to an FT8 frequency to start decoding")
+            f"Decodes appear after each {p.period:g}-second cycle" if self.engine.listening
+            else f"Tune the radio to an {p.name} frequency to start decoding")
         self._refresh_panel()
 
     def _refresh_panel(self) -> None:
@@ -458,7 +644,7 @@ class Ft8Page(Gtk.Box):
             for d in ds:
                 if c and d.message.addressed_to(self.station.settings.callsign) and \
                         d.message.de.strip("<>") == c.call:
-                    items.append((slot_start(slot), d.text, False))
+                    items.append((self.engine.proto.slot_start(slot), d.text, False))
         for when, text in seq.history:
             items.append((when.timestamp(), text, True))
         if self.engine.transmitting_text and self.engine.transmitting_text != "Tune":
@@ -477,19 +663,26 @@ class Ft8Page(Gtk.Box):
 
     def _clock_tick(self) -> bool:
         now = time.time()
-        slot = slot_of(now)
-        t_in = now - slot_start(slot)
+        p = self.engine.proto
+        slot = p.slot_of(now)
+        t_in = now - p.slot_start(slot)
         self.clock.set_label(datetime.fromtimestamp(now, timezone.utc).strftime("%H:%M:%S UTC"))
-        self.cycle.set_fraction(t_in / PERIOD)
+        self.cycle.set_fraction(t_in / p.period)
         seq = self.engine.sequencer
         if seq.active:
-            if self.engine.transmitting_text:
+            if seq.waiting:
+                self.contact_status.remove_css_class("error")
+                left = max(0.0, p.slot_start(seq.wait_until + 1) - now)
+                who = seq.contact.call if seq.contact else "them"
+                self.contact_status.set_label(f"Waiting for {who} to come back · {int(left // 60)}:"
+                                              f"{int(left % 60):02d} left. KX3-Rig answers if they call.")
+            elif self.engine.transmitting_text:
                 self.contact_status.set_label("Transmitting…")
                 self.contact_status.add_css_class("error")
             else:
                 self.contact_status.remove_css_class("error")
                 ours_next = ((slot + 1) % 2 == 0) == seq.tx_even
-                wait = PERIOD - t_in + (0 if ours_next else PERIOD)
+                wait = p.period - t_in + (0 if ours_next else p.period)
                 if seq.next_message() is None:
                     self.contact_status.set_label("Listening for their 73…")
                 else:

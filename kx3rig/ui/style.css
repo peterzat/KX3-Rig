@@ -11,6 +11,7 @@
 .tag.cq { background-color: alpha(@accent_bg_color, 0.18); }
 .tag.me { background-color: alpha(@warning_bg_color, 0.30); }
 .tag.small { padding: 1px 8px; font-size: 80%; }
+.tag.new { background-color: alpha(@success_bg_color, 0.25); }
 
 /* Hero frequency readout (pair with .numeric) */
 .freq-readout { font-weight: 300; font-size: 420%; }
