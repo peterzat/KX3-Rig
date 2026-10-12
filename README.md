@@ -27,26 +27,6 @@ and the rules a coding agent needs to change a radio app safely:
 - transmit safety rules and conventions in [CLAUDE.md](CLAUDE.md)
 - an emulator good enough to run the whole app without a radio
 
-Want a quick-bar setting, a different band plan, or support for your antenna? Describe it to
-Claude Code, then test it on your own equipment and local conditions. The development setup (spec, code review, and security review skills, plus conventions) is
-[zat.env](https://github.com/peterzat/zat.env).
-
-[Smartscan](docs/smartscan.md) and [Loop Tune](docs/looptune.md) were built this way on
-purpose: personal features, start to end, because we can. Smartscan hunts the band for someone
-to talk to. Loop Tune guides the AlexLoop's tuning procedure and quietly says when it is due.
-Each was researched from sources, designed around this station's rules, and verified against
-the emulator, both in a single Claude Code session.
-
-<img src="docs/screenshots/scan-dark.png" width="640" alt="Smartscan sweeping 20 meters (demo)">
-
-The idea behind it is [The Bitter Lesson of Agentic Coding](https://agent-hypervisor.ai/posts/bitter-lesson-of-agentic-coding/):
-"Define what done looks like. Let the model figure out how to get there. Build the simplest
-harness that verifies the work." Here the harness is the references, the rules, and the
-emulator, so repurposing the app for a different station takes a few different paragraphs of
-intent. It also means a polished, professional-looking app can exist for an audience of one: a
-really custom ham shack, and anyone can have their own. How Smartscan and Loop Tune were built
-is in [docs/custom-shack.md](docs/custom-shack.md).
-
 What KX3-Rig reuses (kept current: each new source a feature borrows from is added here, and
 cited in [docs/references.md](docs/references.md)):
 
@@ -66,6 +46,42 @@ cited in [docs/references.md](docs/references.md)):
   warning, decode filters, callsigns on the waterfall, and the SWR stop.
 - **fldigi and G3PLX's PSK31 specification**: the Varicode table, PSK31 shaping, and the CW
   decoder's design, for the Keyboard view.
+
+While this agent-aware repo is great for customizing setups similar to mine, the magic trick
+is to do something like this in a Claude Code CLI session with Opus 5.5 and xhigh reasoning:
+
+```text
+Make a new project forking https://www.github.com/peterzat/KX3-Rig and matching the rig I run in
+FCC Grid CN87: a <large computer controllable transceiver>, with a <typical 100W amplifier for
+that transceiver>, and a <suitable antenna setup>
+```
+
+And you'd expect to one-shot a working solution. Why? Because the agentic pattern acts as a
+live and near [oracle-level](https://agent-hypervisor.ai/posts/bitter-lesson-of-agentic-coding/#what-i-think-is-durable)
+spec for your own radio setup, even if it's quite different from my KX3.
+
+## Make it yours
+
+Want a quick-bar setting, a different band plan, or support for your antenna? Describe it to
+Claude Code, then test it on your own equipment and local conditions. The development setup
+(spec, code review, and security review skills, plus conventions) is
+[zat.env](https://github.com/peterzat/zat.env).
+
+[Smartscan](docs/smartscan.md) and [Loop Tune](docs/looptune.md) were built this way on
+purpose: personal features, start to end, because we can. Smartscan hunts the band for someone
+to talk to. Loop Tune guides the AlexLoop's tuning procedure and quietly says when it is due.
+Each was researched from sources, designed around this station's rules, and verified against
+the emulator, both in a single Claude Code session.
+
+<img src="docs/screenshots/scan-dark.png" width="640" alt="Smartscan sweeping 20 meters (demo)">
+
+The idea behind it is [The Bitter Lesson of Agentic Coding](https://agent-hypervisor.ai/posts/bitter-lesson-of-agentic-coding/):
+"Define what done looks like. Let the model figure out how to get there. Build the simplest
+harness that verifies the work." Here the harness is the references, the rules, and the
+emulator, so repurposing the app for a different station takes a few different paragraphs of
+intent. It also means a polished, professional-looking app can exist for an audience of one: a
+really custom ham shack, and anyone can have their own. How Smartscan and Loop Tune were built
+is in [docs/custom-shack.md](docs/custom-shack.md).
 
 ## What it does
 
