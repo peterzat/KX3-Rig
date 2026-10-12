@@ -1,8 +1,6 @@
-## Review — 2026-10-12 (commit: 0d1c5cf)
+## Review — 2026-10-12 (commit: 35a3a25)
 
-**Summary:** Light review of the one unpushed commit on `main` against `origin/main`: 0d1c5cf, a docs-only change (README.md and docs/custom-shack.md, 9 insertions, 4 deletions). It links the "Agent-First Repos" post from the README's fork paragraph and from custom-shack.md's closing section, and changes the example fork prompt's grid from the station's own CN87 to FN31. `codereview-marker surface` is empty, so no tests, /security, external reviewers, built-in review, or fix loop ran. Checked: both new URLs return 200 (fetched this session); the `#fork-and-customize` anchor exists as an `<h2 id>` on the page; custom-shack.md's definition matches the post's TL;DR ("a codebase built for a coding agent to develop, operate, and use, with humans supplying intent and judgment"); the README's "end state, rules, and verification travel with the fork" matches the post's Fork and Customize section; FN31 is a valid US Maidenhead square (41-42 N, 72-74 W), not the station's; no secrets or new location detail.
-
-Resolved from the prior entry: the one-shot NOTE (README.md:59-61). The paragraph now cites the post's Fork and Customize section, which makes the same claim and reconciles it with the earlier post's one-shot ceiling: "From a blank prompt, that project sits well above the state-of-the-one-shot. From a fork, it sits comfortably inside it." The README's claim now matches its source. The grid half of the "FCC Grid" NOTE is also resolved (the prompt no longer hard-codes the station's square); the term half remains, below.
+**Summary:** Light review of the one unpushed commit on `main` against `origin/main`: 35a3a25, a docs-only change to README.md (12 insertions, 10 deletions). It wraps seven screenshot `<img>` tags in `<p align="center">` (the pattern the wspr-map image already used) and breaks the example fork prompt into five shorter lines. `codereview-marker surface` is empty, so no tests, /security, external reviewers, built-in review, or fix loop ran. Checked: the prompt's words are unchanged, only its line breaks; all eight screenshot paths exist; the two images inside numbered steps (lines 169, 181) keep the 3-space indent, so they stay inside their list items, and a `<p>` HTML block ends at the following blank line as the `<img>` did; `git diff --check` is clean; no secrets or new location detail. pyproject.toml uses README.md as the package readme, but the change has no runtime effect.
 
 **External reviewers:**
 Skipped (light review).
@@ -12,15 +10,19 @@ Skipped (light review).
 
 ### Findings
 
-[NOTE] README.md:50, 59-60 — The repo is now called two different things in consecutive paragraphs: "this agent-aware repo" (line 50, unchanged) and "an agent-first repo" (line 60, new, linked). The linked post uses "agent-aware" for data, not code ("Agent-aware data is complete, queryable, documented, and reachable"). It also says the author once considered "agent-aware codebase" as a name and chose "agent-first". A reader who follows the link meets the term for a different part of the pattern. Confidence: medium (the terms differ; whether line 50 should change is the author's call).
-  Evidence: line 50 `While this agent-aware repo is great for customizing setups similar to mine`; line 60 `[agent-first repo](https://agent-hypervisor.ai/posts/agent-first-repos/#fork-and-customize)`.
+No new issues found.
+
+The three NOTEs from the prior entry are still present (line numbers updated; README.md was not changed in these places beyond line breaks):
+
+[NOTE] README.md:50, 62 — The repo is called "this agent-aware repo" (line 50) and "an agent-first repo" (line 62, linked) in consecutive paragraphs. The linked post uses "agent-aware" for data, not code, and chose "agent-first" over "agent-aware codebase" as the name. Confidence: medium.
+  Evidence: line 50 `While this agent-aware repo is great for customizing setups similar to mine`; line 62 `[agent-first repo](https://agent-hypervisor.ai/posts/agent-first-repos/#fork-and-customize)`.
   Suggested fix: Say "agent-first repo" on line 50 as well, or drop the adjective there.
 
-[NOTE] README.md:54-55 (carried from the prior entry, term half only) — The prompt still says "FCC Grid FN31". Grid squares are Maidenhead locators (an amateur-radio convention, as docs/smartscan.md:86 treats them), not an FCC designation. The grid itself is no longer the station's own square. Confidence: high on the term.
-  Evidence: `FCC Grid FN31: a <large computer controllable transceiver>, ...`
+[NOTE] README.md:55 — The prompt still says "FCC Grid FN31". Grid squares are Maidenhead locators (an amateur-radio convention, as docs/smartscan.md:86 treats them), not an FCC designation. Confidence: high on the term.
+  Evidence: `and matching the rig I run in FCC Grid FN31:`
   Suggested fix: For example, "a US (FCC-licensed) station in grid square FN31", which keeps the band-plan hint that "FCC" may be meant to carry.
 
-[NOTE] README.md:54-55 and the linked post — The README links the post's Fork and Customize section, which quotes the prompt with "FCC Grid CN87". The README now says FN31. The post introduces it as "a prompt along these lines", so the difference is not an error. The commit's goal of a neutral grid only holds within the repo, though: a reader who follows the link sees the station's square in the quoted prompt. CN87 is published by the operator's decision (Accepted Risks), so this is not a disclosure issue. The post is outside this repo. Confidence: low that it matters.
+[NOTE] README.md:55 and the linked post — The post's Fork and Customize section quotes the prompt with "FCC Grid CN87"; the README says FN31. The post calls it "a prompt along these lines", so this is not an error, and CN87 is published by the operator's decision (Accepted Risks). The post is outside this repo. Confidence: low that it matters.
   Evidence: post text `matching the rig I run in FCC Grid CN87`; README line 55 `FCC Grid FN31`.
   Suggested fix: None needed in the repo. Update the post's quoted prompt if the two should match.
 
@@ -46,7 +48,7 @@ Open NOTEs carried from earlier entries (code already on `origin/main`, outside 
 - [NOTE] docs/looptune.md:18-19, 101-102 — The "2 or 3 W" TUN PWR advice can trip the guide's 3.0 W warning.
 - [NOTE] docs/looptune.md:17-18 — "Let go" can read as releasing XMIT.
 - [NOTE] docs/custom-shack.md:105 — Says the guide "is tested", but `LoopTuneDialog` has no test.
-- [NOTE] README.md:206, docs/screenshots/confirm.png — confirm.png shows the old confirmation dialog.
+- [NOTE] README.md:208, docs/screenshots/confirm.png — confirm.png shows the old confirmation dialog.
 
 The /security NOTEs are detailed in SECURITY.md (0 BLOCK, 0 WARN, 14 NOTE as of d664373). No code changed since that scan.
 
@@ -63,6 +65,6 @@ None.
   (2026-10-12). Anything more precise, such as a 6-character subsquare, stays out of the repo.
 
 ---
-*Prior review (2026-10-12, commit 1ebfe34): light review of the README fork prompt and the new "Make it yours" section. It ended at 0 BLOCK, 0 WARN, 2 new NOTEs (the one-shot claim against the cited post, and "FCC Grid CN87" as a term and a hard-coded grid), with 22 open NOTEs carried from d664373. This commit resolves the one-shot NOTE and the grid half of the other.*
+*Prior review (2026-10-12, commit 0d1c5cf): light review of the README and custom-shack.md links to the Agent-First Repos post and the neutral FN31 grid in the fork prompt. It ended at 0 BLOCK, 0 WARN, 3 new NOTEs (agent-aware versus agent-first wording, "FCC Grid" as a term, and the post's quoted prompt still showing CN87), with 22 open NOTEs carried from d664373, and resolved the earlier one-shot NOTE.*
 
-<!-- REVIEW_META: {"date":"2026-10-12","commit":"0d1c5cf","reviewed_up_to":"0d1c5cff87adef73d09fc3ee1287d5e6bd4060d4","base":"origin/main","tier":"light","block":0,"warn":0,"note":25} -->
+<!-- REVIEW_META: {"date":"2026-10-12","commit":"35a3a25","reviewed_up_to":"35a3a25c7ecaabec0e86469e0edeebd6f3bfcd53","base":"origin/main","tier":"light","block":0,"warn":0,"note":25} -->
