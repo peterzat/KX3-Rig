@@ -182,6 +182,7 @@ class DemoAudio:
         self._fir = self._design_bandpass(250, 2900)
         self._stations = demo_stations()
         self.loop = DemoLoop()
+        self._keyboard: dict[str, np.ndarray] = {}    # looping PSK31 and CW bands, made on first use
 
     def start(self) -> None:
         self._thread = threading.Thread(target=self._run, name="demo-audio", daemon=True)
@@ -230,7 +231,8 @@ class DemoAudio:
         if getattr(state, "ptt", False) or getattr(state, "transmitting", False):
             return out
         if mode is not None and mode.is_data:
-            out += self._ft8_like(t, wall)
+            kind = self._keyboard_kind(freq)
+            out += self._keyboard_band(kind, t) if kind else self._ft8_like(t, wall)
         elif mode is not None and (mode.is_cw or mode in (Mode.USB, Mode.LSB, Mode.AM)):
             out += self._band(t, wall, freq, mode)
         return out.astype(np.float32)
@@ -253,6 +255,45 @@ class DemoAudio:
             elif 150 < shift < 3_000:
                 out += synth_cw(len(t) / RATE, RATE, freq=shift, amp=st.amp, t0=t[0] + st.offset_s)
         return out
+
+    @staticmethod
+    def _keyboard_kind(dial: int) -> str:
+        from . import bandplan
+        from .keyboard.engine import CW, PSK31, dial_for
+
+        band = bandplan.band_for(dial)
+        if band is None:
+            return ""
+        for kind in (PSK31, CW):
+            d = dial_for(kind, band)
+            if d is not None and abs(dial - d) < 3_000:
+                return kind
+        return ""
+
+    def _keyboard_band(self, kind: str, t: np.ndarray) -> np.ndarray:
+        """A minute of PSK31 or CW stations, looped, for the Keyboard view."""
+        if kind not in self._keyboard:
+            from .keyboard import cw, psk31
+
+            seconds = 60
+            if kind == "psk31":
+                audio = psk31.demo_signal([
+                    ("CQ CQ CQ de W7PSK W7PSK W7PSK pse k", 1000),
+                    ("N5ABC de KE7KEY - Good morning Bob, rig here is a KX3 at 5 watts into a loop. "
+                     "Weather is cool and rainy. btu N5ABC de KE7KEY k", 1350),
+                    ("CQ CQ de VE7DIG VE7DIG k", 640),
+                    ("K9ZZX de N0QRP tnx fer the qso, 73 es gl", 1820),
+                ], seconds, snr_db=14, seed=11)
+            else:
+                audio = cw.demo_signal([
+                    ("CQ CQ CQ DE K7CW K7CW K", 18, 700),
+                    ("N5ABC DE W6QRP TU UR RST 579 579 NAME AL QTH CA HW? KN", 22, 940),
+                    ("CQ POTA DE KE7XYZ KE7XYZ K", 26, 520),
+                ], seconds, snr_db=14, seed=12)
+            self._keyboard[kind] = (audio * 0.6).astype(np.float32)
+        audio = self._keyboard[kind]
+        idx = (np.round(t * RATE).astype(np.int64)) % len(audio)
+        return audio[idx]
 
     def _ft8_like(self, t: np.ndarray, wall: float) -> np.ndarray:
         slot = int(wall // 15)

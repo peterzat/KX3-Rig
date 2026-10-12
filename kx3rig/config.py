@@ -53,6 +53,10 @@ class Settings:
     loop_setup_seen: bool = False
     # FT8 or FT4 in the FT8 view.
     digital_mode: str = "FT8"
+    # The operator's first name, for PSK31 and CW macros.
+    operator_name: str = ""
+    # Share WSPR spots on wsprnet.org (callsign, 4-character grid, spots heard). Off until chosen.
+    wspr_upload: bool = False
 
     @property
     def grid4(self) -> str:
@@ -62,10 +66,11 @@ class Settings:
     def clamp(self) -> None:
         defaults = Settings.__dataclass_fields__
         # Hand-edited files can hold nulls, NaN, or the wrong types; those fall back.
-        for name in ("callsign", "grid", "license_class", "serial_port", "digital_mode"):
+        for name in ("callsign", "grid", "license_class", "serial_port", "digital_mode",
+                     "operator_name"):
             if not isinstance(getattr(self, name), str):
                 setattr(self, name, defaults[name].default)
-        for name in ("listen", "loop_setup_seen"):
+        for name in ("listen", "loop_setup_seen", "wspr_upload"):
             if not isinstance(getattr(self, name), bool):
                 setattr(self, name, defaults[name].default)
         if self.digital_mode not in ("FT8", "FT4"):

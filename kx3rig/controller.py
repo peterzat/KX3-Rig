@@ -98,6 +98,9 @@ class Station(GObject.Object):
         self.scanning = False
         self._clip = None
         self._swr_check = 0
+        # Activities that key the radio on their own schedule (FT8, the WSPR beacon,
+        # a keyboard message): (owner, reason()) where reason() says why it is busy.
+        self._keyers: list[tuple[object, object]] = []
 
         if demo:
             from .fakeradio import FakeKX3
@@ -280,6 +283,19 @@ class Station(GObject.Object):
         if mode is not None and mode.is_data:
             return TxCheck(False, "This is a data mode. Use the FT8 view to transmit.")
         return self.can_transmit()
+
+    def register_keyer(self, owner, reason) -> None:
+        self._keyers.append((owner, reason))
+
+    def auto_keying(self, exclude=None) -> str:
+        """Why something else may key the radio by itself right now, or "". One
+        such activity at a time: they would otherwise interleave transmissions."""
+        for owner, reason in self._keyers:
+            if owner is not exclude:
+                text = reason()
+                if text:
+                    return text
+        return ""
 
     # --- voice transmit -------------------------------------------------------------------
 

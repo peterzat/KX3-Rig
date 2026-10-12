@@ -86,6 +86,9 @@ class Ft8Engine(GObject.Object):
         self._decode_lock = threading.Lock()
         self._refusals = 0
         self._refusal_slot: int | None = None
+        register = getattr(station, "register_keyer", None)   # absent on test stand-ins
+        if register is not None:
+            register(self, lambda: f"Finish the {self.proto.name} contact first." if self.busy else "")
 
     # --- lifecycle --------------------------------------------------------------------
 
@@ -142,6 +145,9 @@ class Ft8Engine(GObject.Object):
     # --- operator actions -------------------------------------------------------------------
 
     def check_tx(self) -> bandplan.TxCheck:
+        other = self.station.auto_keying(exclude=self)
+        if other:
+            return bandplan.TxCheck(False, other)
         if not encode.available():
             return bandplan.TxCheck(False, "WSJT-X's ft8code isn't installed, so FT8 can't be encoded.")
         if self.station.radio.mode is not Mode.DATA:

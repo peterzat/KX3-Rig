@@ -128,6 +128,8 @@ class Smartscan(GObject.Object):
             return "Stop transmitting first."
         if self.ft8 is not None and self.ft8.busy:
             return "Finish the FT8 contact first."
+        if self.station.auto_keying():
+            return self.station.auto_keying()
         if not self.station.audio.rx:
             return "Radio audio isn't available, so there is nothing to listen to."
         band = bandplan.band_for(st.frequency)

@@ -165,9 +165,51 @@ def run(app, out_dir: str) -> None:
                       (t + 84300, lambda: style.set_color_scheme(Adw.ColorScheme.DEFAULT)),
                       (t + 86000, lambda: capture(win, os.path.join(out_dir, "qso-4-logged-light.png")))]
             t += 86500
+    if app.demo not in ("off", "unplugged"):
+        t = _keyboard_and_wspr_plans(app, win, style, plan, out_dir, steps, t)
     steps.append((t + 300, lambda: win.close()))
     for delay, fn in steps:
         GLib.timeout_add(delay, lambda f=fn: (f(), False)[1])
+
+
+def _keyboard_and_wspr_plans(app, win, style, plan, out_dir, steps, t):
+    from . import bandplan
+
+    band = bandplan.BY_NAME["20m"]
+    if "ft4" in plan:
+        steps += [(t, lambda: style.set_color_scheme(Adw.ColorScheme.FORCE_DARK)),
+                  (t + 100, lambda: win.show_view("ft8")),
+                  (t + 300, lambda: win.ft8_page.mode_buttons["FT4"].set_active(True)),
+                  (t + 24000, lambda: capture(win, os.path.join(out_dir, "ft4-dark.png")))]
+        t += 24500
+    if "keyboard" in plan:
+        steps += [(t, lambda: style.set_color_scheme(Adw.ColorScheme.FORCE_DARK)),
+                  (t + 100, lambda: win.show_view("keyboard")),
+                  (t + 300, lambda: app.keyboard.tune_radio(band)),
+                  (t + 25000, lambda: app.keyboard.set_their_call("W7PSK")),
+                  (t + 25200, lambda: win.keyboard_page.entry.set_text(
+                      app.keyboard.macro("{call} de {me} {me} k"))),
+                  (t + 26000, lambda: capture(win, os.path.join(out_dir, "psk31-dark.png"))),
+                  (t + 26300, lambda: win.keyboard_page.mode_buttons["cw"].set_active(True)),
+                  (t + 26600, lambda: app.keyboard.tune_radio(band)),
+                  (t + 50000, lambda: capture(win, os.path.join(out_dir, "cw-dark.png")))]
+        t += 50500
+    if "wspr" in plan:
+        from .wspr import protocol as wspr
+
+        def spots():
+            import time as _time
+
+            slot = wspr.slot_of(_time.time())
+            for i in range(6, 0, -1):
+                app.wspr._on_spots(slot - i, "20m", app.wspr._demo_spots(slot - i, app.station.radio.frequency))
+        steps += [(t, lambda: style.set_color_scheme(Adw.ColorScheme.FORCE_DARK)),
+                  (t + 100, lambda: win.show_view("wspr")),
+                  (t + 300, lambda: app.station.go_dial(wspr.DIALS["20m"])),
+                  (t + 3000, spots),
+                  (t + 6000, lambda: capture(win, os.path.join(out_dir, "wspr-dark.png")))]
+        t += 6500
+    return t
 
 
 def _close_dialogs(win) -> None:

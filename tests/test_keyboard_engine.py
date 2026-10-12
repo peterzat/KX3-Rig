@@ -117,3 +117,19 @@ def test_find_cw_tone(station, kb):
         kb._feed(audio[i:i + 1200], 0.0)
     assert kb.find_cw_tone() == pytest.approx(850, abs=10)
     assert kb.offset_hz == pytest.approx(850, abs=10)
+
+
+def test_log_a_cw_contact(station, kb, monkeypatch, tmp_path):
+    from kx3rig.ft8 import adif
+
+    kb.log_path = str(tmp_path / "log.adi")
+    kb.set_mode(CW)
+    with pytest.raises(ValueError):
+        kb.log_contact()
+    kb.set_their_call("k7cw")
+    assert kb.macro("{call} DE {me} K") == "K7CW DE N0CALL K"
+    entry = kb.log_contact("579", "599", name="Ann")
+    text = open(kb.log_path).read()
+    assert "<mode:2>CW" in text and "<rst_sent:3>579" in text and "<name:3>Ann" in text
+    assert entry.dial_hz == station.radio.frequency + 700 and kb.their_call == ""
+    assert ("K7CW", "20m") in adif.worked(kb.log_path)

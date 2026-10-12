@@ -20,10 +20,12 @@ Receive runs only while the Keyboard view is open (start/stop).
 
 from __future__ import annotations
 
+import os
 import re
 import threading
 import time
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 
 import gi
 import numpy as np
@@ -119,14 +121,20 @@ class KeyboardEngine(GObject.Object):
         "event": (GObject.SignalFlags.RUN_FIRST, None, (str, str)),
     }
 
-    def __init__(self, station):
+    def __init__(self, station, demo: bool = False):
         super().__init__()
         self.station = station
         self.settings: config.Settings = station.settings
+        # The same logbook as FT8 (demo contacts stay out of the real one).
+        self.log_path = os.path.join(config.data_dir(), "kx3rig-demo-log.adi" if demo else "kx3rig-log.adi")
+        self.their_call = ""
+        self.their_name = ""
+        self.time_on: datetime | None = None
         self.mode = PSK31
         self.offset_hz = PSK_OFFSET_HZ
         self.wpm = 18
         self.running = False
+        self.last_received = 0.0
         self.sending_text = ""
         self.lines: list[Line] = []
         self._lock = threading.Lock()
@@ -142,6 +150,7 @@ class KeyboardEngine(GObject.Object):
         self._send_timer = 0
         self._recent: list[np.ndarray] = []     # the last few seconds, for finding a CW tone
         self._recent_n = 0
+        station.register_keyer(self, lambda: "Wait for the message to finish, or press Stop." if self.busy else "")
 
     # --- lifecycle -------------------------------------------------------------------
 
@@ -225,6 +234,7 @@ class KeyboardEngine(GObject.Object):
             text, self._pending = self._pending, ""
             dirty, self._channels_dirty = self._channels_dirty, False
         if text:
+            self.last_received = time.monotonic()
             self._append(False, text)
             self.emit("received", text)
         if dirty:
@@ -258,6 +268,9 @@ class KeyboardEngine(GObject.Object):
         return int(self.offset_hz - half), int(self.offset_hz + half)
 
     def check_tx(self, text: str = "x") -> bandplan.TxCheck:
+        other = self.station.auto_keying(exclude=self)
+        if other:
+            return bandplan.TxCheck(False, other)
         radio = self.station.radio
         if radio.mode is not Mode.DATA:
             return bandplan.TxCheck(False, "Switch the radio to DATA mode. Tune Radio does this.")
@@ -352,6 +365,42 @@ class KeyboardEngine(GObject.Object):
         self._finish_progress(False)
         self.sending_text = ""
         self.emit("sending", False, "")
+
+    # --- the contact ------------------------------------------------------------------
+
+    def set_their_call(self, call: str) -> None:
+        call = call.strip().upper()
+        if call != self.their_call:
+            self.their_call = call
+            self.time_on = datetime.now(timezone.utc) if call else None
+            self.emit("changed")
+
+    def macro(self, template: str) -> str:
+        return expand(template, self.settings.callsign, self.their_call, self.settings.grid,
+                      getattr(self.settings, "operator_name", ""))
+
+    def log_contact(self, rst_sent: str = "599", rst_rcvd: str = "599", name: str = "",
+                    comment: str = ""):
+        """Append the contact to the ADIF log; returns the entry (or raises OSError)."""
+        from ..ft8 import adif
+
+        if not self.their_call:
+            raise ValueError("Enter the other station's callsign first.")
+        st = self.station.radio
+        band = bandplan.band_for(st.frequency)
+        now = datetime.now(timezone.utc)
+        # The KX3 dial plus our tone is where the signal is.
+        rf = int(st.frequency + self.offset_hz)
+        entry = adif.LogEntry(
+            call=self.their_call, grid="", rst_sent=rst_sent or "599", rst_rcvd=rst_rcvd or "599",
+            time_on=self.time_on or now, time_off=now, band=band.name if band else "", dial_hz=rf,
+            station_call=self.settings.callsign, my_grid=self.settings.grid, tx_power_w=st.power_set,
+            mode="CW" if self.mode == CW else "PSK", submode="" if self.mode == CW else "PSK31",
+            name=name.strip(), comment=comment.strip(),
+        )
+        adif.append(self.log_path, entry)
+        self.set_their_call("")
+        return entry
 
     # --- tuning -----------------------------------------------------------------------
 

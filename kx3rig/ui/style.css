@@ -8,6 +8,7 @@
   padding: 3px 12px;
 }
 .tag.tx { background-color: @error_bg_color; color: @error_fg_color; }
+.tag.armed { background-color: alpha(@warning_bg_color, 0.85); color: @warning_fg_color; }
 .tag.cq { background-color: alpha(@accent_bg_color, 0.18); }
 .tag.me { background-color: alpha(@warning_bg_color, 0.30); }
 .tag.small { padding: 1px 8px; font-size: 80%; }
@@ -113,3 +114,6 @@ button.tag.loop-tag.tuned { opacity: 0.75; }
 button.tag.loop-tag.attention { background-color: alpha(@warning_bg_color, 0.30); }
 button.pill.attention { box-shadow: inset 0 0 0 2px alpha(@warning_color, 0.55); }
 levelbar.loop-meter trough { min-height: 14px; }
+
+/* Keyboard view transcript */
+textview.transcript { font-size: 115%; background: none; }

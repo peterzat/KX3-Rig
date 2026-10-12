@@ -1,8 +1,7 @@
 # Smartscan
 
-Smartscan answers one question with one click: who can I talk to right now? It sweeps the band
-the radio is on, finds stations, keeps a short recording of each one, and shows which bands are
-open from your location. It never transmits.
+Smartscan sweeps the band the radio is on, finds stations, keeps a short recording of each one,
+and shows which bands are open from your location. It never transmits.
 
 ![Smartscan sweeping 20 meters in demo mode](screenshots/scan-dark.png)
 
@@ -76,8 +75,6 @@ night, greyline) add context without overriding the measurement. Demo mode makes
 and never goes online.
 
 ## Design decisions
-
-These are the operator's choices, made when the tradeoffs were put to them:
 
 - **Whole segment, not just near where the loop is tuned.** A sweep takes about a minute on 20 m.
   The band view's noise curve shows where the AlexLoop hears poorly, so a quiet edge is not

@@ -14,6 +14,8 @@ from ..looptune.state import RETUNE, TOUCH_UP  # noqa: E402
 from ..radio import Link  # noqa: E402
 from .connect_page import ConnectPage  # noqa: E402
 from .ft8_page import Ft8Page  # noqa: E402
+from .keyboard_page import KeyboardPage  # noqa: E402
+from .wspr_page import WsprPage  # noqa: E402
 from .radio_page import STEPS, RadioPage  # noqa: E402
 
 BANNERS = {
@@ -28,12 +30,14 @@ BANNERS = {
 class MainWindow(Adw.ApplicationWindow):
     __gtype_name__ = "KX3MainWindow"
 
-    def __init__(self, app, station, engine, smartscan=None, looptune=None):
+    def __init__(self, app, station, engine, smartscan=None, looptune=None, keyboard=None, wspr=None):
         super().__init__(application=app, title="KX3-Rig")
         self.station = station
         self.engine = engine
         self.smartscan = smartscan
         self.looptune = looptune
+        self.keyboard = keyboard
+        self.wspr = wspr
         self.set_default_size(1100, 860)
         self.set_size_request(380, 520)
         self._ever_connected = False
@@ -53,6 +57,10 @@ class MainWindow(Adw.ApplicationWindow):
         station.connect("event", lambda s, kind, msg: self._on_event(kind, msg))
         engine.connect("event", lambda e, kind, msg: self.toast(msg))
         engine.connect("transmitting", lambda e, on, text: self._on_radio(self.station.radio))
+        engine.connect("contact-changed", lambda e: self._update_air())
+        for other in (keyboard, wspr):
+            if other is not None:
+                other.connect("changed", lambda e: self._update_air())
 
         self._add_breakpoints()
         self._on_radio(station.radio)
@@ -84,6 +92,13 @@ class MainWindow(Adw.ApplicationWindow):
         ft8 = self.stack.add_titled_with_icon(self.ft8_page, "ft8", self.engine.proto.name,
                                               "network-transmit-receive-symbolic")
         self.ft8_page.on_title = ft8.set_title
+        self.keyboard_page = self.wspr_page = None
+        if self.keyboard is not None:
+            self.keyboard_page = KeyboardPage(self.station, self.keyboard, self.toast, self.confirm_transmit)
+            self.stack.add_titled_with_icon(self.keyboard_page, "keyboard", "Keyboard", "kx3rig-keyboard-symbolic")
+        if self.wspr is not None:
+            self.wspr_page = WsprPage(self.station, self.wspr, self.toast, self.confirm_transmit)
+            self.stack.add_titled_with_icon(self.wspr_page, "wspr", "WSPR", "kx3rig-beacon-symbolic")
         self.switcher = Adw.ViewSwitcher(stack=self.stack, policy=Adw.ViewSwitcherPolicy.WIDE)
         header.set_title_widget(self.switcher)
         header.pack_start(self._connection_button())
@@ -93,6 +108,13 @@ class MainWindow(Adw.ApplicationWindow):
         self.tx_pill.add_css_class("tx")
         self.tx_pill.add_css_class("caption-heading")
         header.pack_end(self.tx_pill)
+        # Amber while something may key the radio by itself at its next turn (an FT8
+        # contact or CQ, the WSPR beacon): after WSJT-X Improved's yellow warning.
+        self.armed_pill = Gtk.Label(label="Armed", visible=False, valign=Gtk.Align.CENTER)
+        self.armed_pill.add_css_class("tag")
+        self.armed_pill.add_css_class("armed")
+        self.armed_pill.add_css_class("caption-heading")
+        header.pack_end(self.armed_pill)
         view.add_top_bar(header)
         self.banner = Adw.Banner(revealed=False)
         view.add_top_bar(self.banner)
@@ -170,6 +192,10 @@ class MainWindow(Adw.ApplicationWindow):
         medium = Adw.Breakpoint.new(Adw.BreakpointCondition.parse("max-width: 960sp"))
         medium.add_setter(self.ft8_page.split, "collapsed", True)
         medium.add_setter(self.ft8_page.panel_toggle, "visible", True)
+        for page in (self.keyboard_page, self.wspr_page):
+            if page is not None:
+                medium.add_setter(page.split, "collapsed", True)
+                medium.add_setter(page.panel_toggle, "visible", True)
         self.add_breakpoint(medium)
 
     # --- behaviour --------------------------------------------------------------------------
@@ -228,6 +254,7 @@ class MainWindow(Adw.ApplicationWindow):
             self.banner.set_revealed(False)
         transmitting = st.ptt or st.transmitting
         self.tx_pill.set_visible(transmitting)
+        self._update_air()
         rows = self.conn_rows
         if st.options and st.firmware:
             rows["radio"].set_subtitle(f"Elecraft KX3, firmware {st.firmware:.2f}")
@@ -269,9 +296,21 @@ class MainWindow(Adw.ApplicationWindow):
     def show_view(self, name: str) -> None:
         self.stack.set_visible_child_name(name)
 
+    def _update_air(self) -> None:
+        st = self.station.radio
+        on_air = bool(st.ptt or st.transmitting)
+        reason = self.station.auto_keying()
+        self.armed_pill.set_visible(bool(reason) and not on_air)
+        self.armed_pill.set_tooltip_text(f"KX3-Rig may transmit at the next turn. {reason} Esc stops it."
+                                         if reason else None)
+
     def halt(self) -> None:
         if self.smartscan is not None:
             self.smartscan.stop()
+        if self.keyboard is not None:
+            self.keyboard.halt()
+        if self.wspr is not None:
+            self.wspr.stop_beacon()
         self.engine.halt()
         self.station.halt_all()
 

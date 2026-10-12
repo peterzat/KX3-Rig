@@ -92,6 +92,8 @@ class LoopTuner(GObject.Object):
             return "Stop transmitting first."
         if ft8 is not None and ft8.busy:
             return "Finish the FT8 contact first."
+        if self.station.auto_keying():
+            return self.station.auto_keying()
         band = bandplan.band_for(self.station.radio.frequency)
         if not covers(band):
             return f"The AlexLoop doesn't cover {band.label}." if band else "Tune to an amateur band first."

@@ -48,6 +48,8 @@ SHORTCUTS_UI = """<?xml version="1.0" encoding="UTF-8"?>
             <property name="title">General</property>
             <child><object class="GtkShortcutsShortcut"><property name="title">Radio view</property><property name="accelerator">&lt;Ctrl&gt;1</property></object></child>
             <child><object class="GtkShortcutsShortcut"><property name="title">FT8 view</property><property name="accelerator">&lt;Ctrl&gt;2</property></object></child>
+            <child><object class="GtkShortcutsShortcut"><property name="title">Keyboard view (PSK31 and CW)</property><property name="accelerator">&lt;Ctrl&gt;3</property></object></child>
+            <child><object class="GtkShortcutsShortcut"><property name="title">WSPR view</property><property name="accelerator">&lt;Ctrl&gt;4</property></object></child>
             <child><object class="GtkShortcutsShortcut"><property name="title">Preferences</property><property name="accelerator">&lt;Ctrl&gt;comma</property></object></child>
             <child><object class="GtkShortcutsShortcut"><property name="title">Keyboard shortcuts</property><property name="accelerator">&lt;Ctrl&gt;question</property></object></child>
             <child><object class="GtkShortcutsShortcut"><property name="title">Quit</property><property name="accelerator">&lt;Ctrl&gt;Q</property></object></child>
@@ -71,6 +73,8 @@ class Application(Adw.Application):
         self.engine = None
         self.smartscan = None
         self.looptune = None
+        self.keyboard = None
+        self.wspr = None
 
     def do_startup(self) -> None:
         Adw.Application.do_startup(self)
@@ -90,6 +94,8 @@ class Application(Adw.Application):
             ("halt", lambda *a: self.window and self.window.halt(), ["Escape"]),
             ("view-radio", lambda *a: self.window and self.window.show_view("radio"), ["<Ctrl>1"]),
             ("view-ft8", lambda *a: self.window and self.window.show_view("ft8"), ["<Ctrl>2"]),
+            ("view-keyboard", lambda *a: self.window and self.window.show_view("keyboard"), ["<Ctrl>3"]),
+            ("view-wspr", lambda *a: self.window and self.window.show_view("wspr"), ["<Ctrl>4"]),
         ):
             action = Gio.SimpleAction.new(name, None)
             action.connect("activate", callback)
@@ -119,7 +125,13 @@ class Application(Adw.Application):
         from .looptune.tuner import LoopTuner
 
         self.looptune = LoopTuner(self.station)
-        self.window = MainWindow(self, self.station, self.engine, self.smartscan, self.looptune)
+        from .keyboard.engine import KeyboardEngine
+        from .wspr.engine import WsprEngine
+
+        self.keyboard = KeyboardEngine(self.station, demo=bool(self.demo))
+        self.wspr = WsprEngine(self.station, demo=bool(self.demo))
+        self.window = MainWindow(self, self.station, self.engine, self.smartscan, self.looptune,
+                                 self.keyboard, self.wspr)
         builder = Gtk.Builder.new_from_string(SHORTCUTS_UI, -1)
         self.window.set_help_overlay(builder.get_object("help_overlay"))
         if self.demo:
@@ -131,6 +143,7 @@ class Application(Adw.Application):
             from .controller import AudioStatus
             self.station._set_audio(AudioStatus())   # no Digirig: no sound card either
         self.engine.start()
+        self.wspr.start()
         self.window.present()
         if self.screenshot_dir:
             from .screenshots import run as screenshots
@@ -147,6 +160,11 @@ class Application(Adw.Application):
             self.smartscan.stop(restore=False)
         if self.engine:
             self.engine.stop()
+        if self.wspr:
+            self.wspr.stop()
+        if self.keyboard:
+            self.keyboard.halt()
+            self.keyboard.stop()
         if self.station:
             if self.demo:
                 self.station.halt_all()
