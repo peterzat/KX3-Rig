@@ -4,11 +4,13 @@ A friendly controller for the **Elecraft KX3**, made for the GNOME desktop. Plug
 open the app, and start tuning. KX3-Rig shows a big tunable frequency, the band around you as a
 waterfall, lets you listen and talk through your computer, and runs FT8 contacts for you.
 
-![KX3-Rig on 20 meters](docs/screenshots/radio-dark.png)
+![KX3-Rig on a ThinkPad, receiving 40 meters through a Digirig on the Elecraft KX3](docs/screenshots/station.jpg)
 
 It is built for one station today: an Elecraft KX3 connected to an Ubuntu laptop through a
 **Digirig Mobile** and the Elecraft KX cable set, with a magnetic loop antenna. The design follows
 [Bottles](https://usebottles.com): GTK 4 and libadwaita, plain language, no clutter.
+
+![KX3-Rig on 20 meters](docs/screenshots/radio-dark.png)
 
 ## What it does
 
