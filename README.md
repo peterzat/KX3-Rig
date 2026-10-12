@@ -10,7 +10,7 @@ reads and sends PSK31 and CW, and maps who hears you on WSPR.
 It is built for one station today: an Elecraft KX3 connected to an Ubuntu laptop through a
 **Digirig Mobile** and the Elecraft KX cable set, with a magnetic loop antenna.
 
-<img src="docs/screenshots/radio-dark.png" width="640" alt="KX3-Rig on 20 meters">
+<p align="center"><img src="docs/screenshots/radio-dark.png" width="640" alt="KX3-Rig on 20 meters"></p>
 
 ## Why this exists
 
@@ -51,9 +51,11 @@ While this agent-aware repo is great for customizing setups similar to mine, the
 is to do something like this in a Claude Code CLI session with Opus 5.5 and xhigh reasoning:
 
 ```text
-Make a new project forking https://www.github.com/peterzat/KX3-Rig and matching the rig I run in
-FCC Grid FN31: a <large computer controllable transceiver>, with a <typical 100W amplifier for
-that transceiver>, and a <suitable antenna setup>
+Make a new project forking https://www.github.com/peterzat/KX3-Rig
+and matching the rig I run in FCC Grid FN31:
+a <large computer controllable transceiver>,
+with a <typical 100W amplifier for that transceiver>,
+and a <suitable antenna setup>
 ```
 
 And you'd expect to one-shot a working solution. Why? Because this is an
@@ -75,7 +77,7 @@ to talk to. Loop Tune guides the AlexLoop's tuning procedure and quietly says wh
 Each was researched from sources, designed around this station's rules, and verified against
 the emulator, both in a single Claude Code session.
 
-<img src="docs/screenshots/scan-dark.png" width="640" alt="Smartscan sweeping 20 meters (demo)">
+<p align="center"><img src="docs/screenshots/scan-dark.png" width="640" alt="Smartscan sweeping 20 meters (demo)"></p>
 
 The idea behind it is [The Bitter Lesson of Agentic Coding](https://agent-hypervisor.ai/posts/bitter-lesson-of-agentic-coding/):
 "Define what done looks like. Let the model figure out how to get there. Build the simplest
@@ -121,11 +123,11 @@ is in [docs/custom-shack.md](docs/custom-shack.md).
   grid, and class in Preferences first), and the app explains why when it can't transmit
   somewhere.
 
-<img src="docs/screenshots/ft8-contact.png" width="640" alt="An FT8 contact in progress">
+<p align="center"><img src="docs/screenshots/ft8-contact.png" width="640" alt="An FT8 contact in progress"></p>
 
 <p align="center"><img src="docs/screenshots/wspr-map.png" width="360" alt="The WSPR map: who is heard, by direction and distance (demo)"></p>
 
-<img src="docs/screenshots/psk31-dark.png" width="640" alt="PSK31 in the Keyboard view, four signals read at once (demo)">
+<p align="center"><img src="docs/screenshots/psk31-dark.png" width="640" alt="PSK31 in the Keyboard view, four signals read at once (demo)"></p>
 
 ## Requirements
 
@@ -164,7 +166,7 @@ including stations that answer you.
    ATU TUNE for about 2 seconds). Open KX3-Rig. It finds the Digirig and the radio by itself
    and shows a checklist until everything answers, with a guide to which plug goes in which jack.
 
-   <img src="docs/screenshots/connect.png" width="640" alt="Waiting for the radio, with the cable guide">
+   <p align="center"><img src="docs/screenshots/connect.png" width="640" alt="Waiting for the radio, with the cable guide"></p>
 
 2. **Tune.** Pick a band, pick a mode, and tune. Turn up the volume at the bottom left to hear
    the radio. The **Radio audio** meter at the bottom right should sit in the green; if it
@@ -176,7 +178,7 @@ including stations that answer you.
    **Loop Tuned** until you move away. The best practice, and why, is summarized at the top of
    [docs/looptune.md](docs/looptune.md).
 
-   <img src="docs/screenshots/loop-peak-dark.png" width="480" alt="Loop Tune peaking the loop on receive noise (demo)">
+   <p align="center"><img src="docs/screenshots/loop-peak-dark.png" width="480" alt="Loop Tune peaking the loop on receive noise (demo)"></p>
 
 4. **Talk.** In LSB, USB, AM, or FM, hold **Hold to Talk** and speak. The first time on a
    band, KX3-Rig asks you to confirm and says whether the loop is tuned for the frequency. Set
@@ -203,7 +205,7 @@ including stations that answer you.
 
 ## Safety
 
-<img src="docs/screenshots/confirm.png" width="480" alt="The first transmission on a band asks for confirmation">
+<p align="center"><img src="docs/screenshots/confirm.png" width="480" alt="The first transmission on a band asks for confirmation"></p>
 
 - KX3-Rig clears RTS and DTR before opening the serial port (RTS keys the Digirig's
   push-to-talk). A brief RTS pulse from the USB serial driver during open has not been ruled
