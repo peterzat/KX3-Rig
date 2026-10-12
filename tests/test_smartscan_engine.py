@@ -240,3 +240,19 @@ def test_an_old_clip_is_recorded_again(station, scan):
     assert scan._needs_clip([d])
     entry.clip_at = now - 10
     assert not scan._needs_clip([d])
+
+
+def test_restarting_the_same_sweep_keeps_a_cw_entry_heard_first(station, scan):
+    _on(station, 14_300_000, Mode.USB)
+    assert scan.start() == ""
+    assert scan.plan.kind == "voice"
+    scan.heard.add(14_030_000, "cw", Mode.CW, 12, -6, time.time())
+    assert scan.heard.entries[0].kind == "cw"
+    scan.stop()
+    assert pump(lambda: station.radio.frequency == 14_300_000 and station.radio.mode is Mode.USB)
+    assert scan.start() == ""
+    assert [e.kind for e in scan.heard.entries] == ["cw"], "same band and sweep: the list stays"
+    scan.stop(restore=False)
+    _on(station, 7_200_000, Mode.LSB)
+    assert scan.start() == ""
+    assert scan.heard.entries == [], "another band starts a new list"

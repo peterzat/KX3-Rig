@@ -85,6 +85,7 @@ class Smartscan(GObject.Object):
         self.active = False
         self.plan: Plan | None = None
         self.heard = HeardList()
+        self._heard_for: tuple[str, str] | None = None   # (band, kind) the heard list belongs to
         self.noise: dict[int, float] = {}            # dial -> noise floor (dB) on the last visit
         self.carriers: dict[int, list[tuple[int, int]]] = {}   # dial -> carrier RF spans
         self.index = 0
@@ -145,7 +146,9 @@ class Smartscan(GObject.Object):
         self.plan = plan
         self._replan = st.mode is not plan.scan_mode
         self._origin = (st.frequency, st.mode, st.data_submode)
-        if self.heard.entries and self.heard.entries[0].kind != plan.kind or not self._same_band(plan):
+        # A sweep records both kinds of hearing, so remember what the list was built for.
+        if self._heard_for != (plan.band.name, plan.kind):
+            self._heard_for = (plan.band.name, plan.kind)
             self.heard.clear()
             self.noise.clear()
             self.carriers.clear()
@@ -168,9 +171,6 @@ class Smartscan(GObject.Object):
         self._maybe_fetch(force_emit=True)
         self.emit("changed")
         return ""
-
-    def _same_band(self, plan: Plan) -> bool:
-        return bool(self.heard.entries) and bandplan.band_for(self.heard.entries[0].tune_hz) is plan.band
 
     def stop(self, reason: str = "", restore: bool = True) -> None:
         if not self.active:

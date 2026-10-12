@@ -273,7 +273,7 @@ class MainWindow(Adw.ApplicationWindow):
         band = bandplan.band_for(st.frequency)
         name = band.name if band else ""
         # Ask again when the loop needs a retune here, even on a confirmed band.
-        loop = self.looptune.need if self.looptune is not None else None
+        loop = self.looptune.need_for(st.frequency) if self.looptune is not None else None
         retune = loop is not None and loop.level == RETUNE
         key = f"{name}|retune@{loop.tuned_hz}" if retune else name
         if name and key == self._tx_confirmed_band:

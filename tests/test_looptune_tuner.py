@@ -140,6 +140,13 @@ def test_guide_refuses_while_ft8_may_key(station, tuner):
     assert tuner.open_refusal() == ""
 
 
+def test_guide_refuses_on_bands_the_loop_does_not_cover(station, tuner):
+    _tune(station, 3_850_000, Mode.LSB)
+    assert tuner.open_refusal() == "The AlexLoop doesn't cover 80 m."
+    _tune(station, 14_285_000)
+    assert tuner.open_refusal() == ""
+
+
 def test_last_tune_swr_never_seeds_the_next(station, tuner):
     _tune(station, 14_285_000)
     assert tuner.swr_readable                 # the emulator reports firmware 2.93
@@ -155,3 +162,25 @@ def test_last_tune_swr_never_seeds_the_next(station, tuner):
     tuner.demo_hold_tune(True)
     assert pump(lambda: tuner.keyed and tuner.best_swr is not None, timeout=3)
     assert tuner.best_swr > 2.5
+
+
+def test_advice_catches_up_when_smartscan_stops_without_a_new_reading(station, tuner, monkeypatch):
+    from kx3rig import fakeradio
+    from kx3rig.smartscan.engine import Smartscan
+
+    monkeypatch.setattr(fakeradio.random, "choice", lambda seq: 0)   # a quiet band: S-meter steady
+    _tune(station, 14_300_000)
+    tuner.mark_tuned()
+    scan = Smartscan(station, demo=True)
+    scan.connect("changed", lambda s: tuner.refresh())             # as the Radio view wires it
+    try:
+        assert scan.start() == ""
+        assert pump(lambda: scan._phase == "listen", timeout=3)
+        station._fake.frequency = 14_200_000                        # the operator turns the VFO
+        assert pump(lambda: not scan.active, timeout=4)
+        pump(lambda: False, timeout=0.6)
+        assert station.radio.frequency == 14_200_000
+        assert tuner.need.level == RETUNE
+        assert tuner.need_for(station.radio.frequency).level == RETUNE
+    finally:
+        scan.stop(restore=False)

@@ -25,7 +25,7 @@ from gi.repository import GLib, GObject  # noqa: E402
 
 from .. import bandplan  # noqa: E402
 from .meter import NoiseMeter, Reading  # noqa: E402
-from .state import Need, need  # noqa: E402
+from .state import Need, covers, need  # noqa: E402
 
 TUNE_PWR_W = 1.0          # the TUN PWR the guide asks for
 TUNE_POWER_WARN_W = 3.0   # TUNE above this: TUN PWR is probably NOR (following PWR)
@@ -72,6 +72,12 @@ class LoopTuner(GObject.Object):
     def _compute(self) -> Need:
         return need(self.station.radio.frequency, self.tuned_hz)
 
+    def refresh(self) -> None:
+        """Recompute the advice once Smartscan stops: the operator may have tuned
+        while the sweep held it still, and no later field change need follow."""
+        if not self.station.scanning:
+            self._refresh_need()
+
     def _refresh_need(self) -> None:
         new = self._compute()
         if new != self._need:
@@ -86,6 +92,9 @@ class LoopTuner(GObject.Object):
             return "Stop transmitting first."
         if ft8 is not None and ft8.busy:
             return "Finish the FT8 contact first."
+        band = bandplan.band_for(self.station.radio.frequency)
+        if not covers(band):
+            return f"The AlexLoop doesn't cover {band.label}." if band else "Tune to an amateur band first."
         return ""
 
     def mark_tuned(self, hz: int | None = None) -> None:

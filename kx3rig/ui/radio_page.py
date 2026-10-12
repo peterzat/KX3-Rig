@@ -126,6 +126,8 @@ class RadioPage(Gtk.Box):
             smartscan.connect("conditions-changed", lambda s: self._update_band_outlook())
             smartscan.connect("changed", lambda s: self._update_band_outlook())
             smartscan.connect("dwell", lambda s, d: self._on_dwell(d))
+            if looptune is not None:
+                smartscan.connect("changed", lambda s: looptune.refresh())
 
         # --- waterfall ------------------------------------------------------------------
         wf_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
@@ -327,9 +329,12 @@ class RadioPage(Gtk.Box):
             if self.smartscan is not None and self.smartscan.active:
                 # A new band needs the loop peaked before a sweep is worth anything.
                 self.smartscan.stop(restore=False)
-                self._loop_prompted = band.name
-                self._prompt_loop(f"Tune the loop for {band.label}, then Smartscan carries on there.",
-                                  then_scan=True)
+                from ..looptune.state import covers
+
+                if covers(band):
+                    self._loop_prompted = band.name
+                    self._prompt_loop(f"Tune the loop for {band.label}, then Smartscan carries on there.",
+                                      then_scan=True)
             self.station.select_band(band)
 
     # --- loop tune ---------------------------------------------------------------------------
