@@ -42,7 +42,7 @@ from ..cat import DataSubmode, Mode  # noqa: E402
 from ..radio import Link  # noqa: E402
 from . import conditions  # noqa: E402
 from .detect import RATE, detect, noise_floor_db  # noqa: E402
-from .heard import HeardList  # noqa: E402
+from .heard import CLIP_REFRESH_S, HeardList  # noqa: E402
 from .plan import Plan, make_plan  # noqa: E402
 
 log = logging.getLogger(__name__)
@@ -52,10 +52,11 @@ SETTLE_S = 0.25
 QUICK_S = 0.6
 CONFIRM_S = 1.5
 CLIP_S = 5.0
-CLIP_REFRESH_S = 300        # record a new clip of a known station after this long
 TUNE_TIMEOUT_S = 3.0        # the radio never reached the step: give up the scan
 TAKEOVER_S = 0.4            # a different frequency for this long means the operator tuned
 REVISIT_EVERY = 6           # after this many sweep steps, check the next calling frequency
+AUDIO_STALL_S = 3.0         # a step's audio this late means receive audio stopped
+KEEP_AUDIO_S = 2 * (SETTLE_S + CLIP_S)   # audio kept for the step being listened to
 
 # Module level, so turning Smartscan off and on does not query sooner than the
 # sources allow.
@@ -94,6 +95,7 @@ class Smartscan(GObject.Object):
         self.kp: float | None = None
         self.conditions_error = ""
         self.fetching = False
+        self._replan = False
         self._origin: tuple[int, Mode | None, DataSubmode | None] | None = None
         self._timer = 0
         self._phase = ""
@@ -103,7 +105,7 @@ class Smartscan(GObject.Object):
         self._smeter = -54.0
         self._off_target_since: float | None = None
         self._sweep_started = 0.0
-        self._samples: collections.deque = collections.deque(maxlen=2000)
+        self._samples: collections.deque = collections.deque()
         self._lock = threading.Lock()
         self._quick_done = False
         self._on_hot = False
@@ -130,12 +132,18 @@ class Smartscan(GObject.Object):
         band = bandplan.band_for(st.frequency)
         if band is None:
             return "Tune to an amateur band first."
-        plan = make_plan(band, st.mode, self.station.settings.license_class, st.bandwidth)
+        license_class = self.station.settings.license_class
+        plan = make_plan(band, st.mode, license_class)
+        if plan is not None and st.mode is plan.scan_mode:
+            # The filter is only known for the mode the radio is in; from another
+            # mode, the sweep is resized once the radio reports the scan mode's.
+            plan = make_plan(band, st.mode, license_class, st.bandwidth)
         if plan is None:
             if band.name == "60m":
                 return "Smartscan doesn't sweep 60 m (it is channelized)."
             return f"Your license class has no voice or CW privileges on {band.label}."
         self.plan = plan
+        self._replan = st.mode is not plan.scan_mode
         self._origin = (st.frequency, st.mode, st.data_submode)
         if self.heard.entries and self.heard.entries[0].kind != plan.kind or not self._same_band(plan):
             self.heard.clear()
@@ -211,8 +219,11 @@ class Smartscan(GObject.Object):
     # --- audio (audio thread) ---------------------------------------------------------------
 
     def _feed(self, samples: np.ndarray, end_time: float) -> None:
+        start = end_time - len(samples) / RATE
         with self._lock:
-            self._samples.append((end_time - len(samples) / RATE, samples))
+            self._samples.append((start, samples))
+            while self._samples[0][0] < start - KEEP_AUDIO_S:
+                self._samples.popleft()
 
     def _audio_since(self, t0: float) -> np.ndarray:
         with self._lock:
@@ -258,6 +269,10 @@ class Smartscan(GObject.Object):
         settled = not self.station.link.tuning_pending
         if self._phase == "tune":
             if settled and st.frequency == self.position and st.mode is self.plan.scan_mode:
+                if self._replan:
+                    self._replan = False
+                    if self._resize_for_filter():
+                        return GLib.SOURCE_CONTINUE
                 self._phase = "listen"
                 self._listen_from = time.time() + SETTLE_S
                 self._want_s = QUICK_S
@@ -283,6 +298,9 @@ class Smartscan(GObject.Object):
         self._smeter = max(self._smeter, st.smeter_db)
         audio = self._audio_since(self._listen_from)
         if len(audio) < self._want_s * RATE:
+            if not self.station.audio.rx or time.time() > self._listen_from + self._want_s + AUDIO_STALL_S:
+                self.stop("Smartscan stopped: radio audio stopped.")
+                return GLib.SOURCE_REMOVE
             return GLib.SOURCE_CONTINUE
         found = detect(audio)
         contacts = [d for d in found if d.is_contact]
@@ -295,12 +313,27 @@ class Smartscan(GObject.Object):
         self._finish_step(audio, found)
         return GLib.SOURCE_CONTINUE
 
+    def _resize_for_filter(self) -> bool:
+        """Plan again with the scan mode's filter, read by the link after the mode
+        change; True when that moved the sweep to a new step."""
+        live = self.station.link.state
+        if live.mode is not self.plan.scan_mode or not live.bandwidth:
+            return False
+        plan = make_plan(self.plan.band, self._origin[1], self.station.settings.license_class, live.bandwidth)
+        if plan is None or plan.steps == self.plan.steps:
+            return False
+        self.plan = plan
+        self.index = min(range(len(plan.steps)), key=lambda i: abs(plan.steps[i] - self.position))
+        self._tune_step()
+        self.emit("changed")
+        return True
+
     def _needs_clip(self, contacts) -> bool:
         now = time.time()
         for d in contacts:
             hz = self.plan.tune_frequency(self.position, d)
             entry = self._find(hz, d.kind)
-            if entry is None or entry.clip is None or now - entry.last_seen > CLIP_REFRESH_S:
+            if entry is None or entry.clip is None or now - entry.clip_at > CLIP_REFRESH_S:
                 return True
         return False
 
@@ -324,7 +357,7 @@ class Smartscan(GObject.Object):
             if not any(lo <= (low + high) / 2 <= hi for lo, hi in plan.ranges):
                 continue   # the window reaches past the sweep's edge; that station is outside it
             hz = plan.tune_frequency(dial, d)
-            self.heard.add(hz, d.kind, plan.tune_mode, d.snr_db, self._smeter, now,
+            self.heard.add(hz, d.kind, plan.mode_for(d.kind), d.snr_db, self._smeter, now,
                            clip=clip, clip_dial=dial, spot=plan.spot_label(hz, d.kind))
         if contacts:
             self.emit("heard-changed")

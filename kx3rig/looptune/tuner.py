@@ -78,6 +78,16 @@ class LoopTuner(GObject.Object):
             self._need = new
             self.emit("need-changed")
 
+    def open_refusal(self, ft8=None) -> str:
+        """Why the guide can't open now, or "". The operator's hand goes to the
+        loop, so nothing may be keying the radio or about to (an FT8 contact or
+        CQ keys on its own slots)."""
+        if self.station.transmitting:
+            return "Stop transmitting first."
+        if ft8 is not None and ft8.busy:
+            return "Finish the FT8 contact first."
+        return ""
+
     def mark_tuned(self, hz: int | None = None) -> None:
         self.tuned_hz = hz if hz is not None else self.station.radio.frequency
         self._refresh_need()

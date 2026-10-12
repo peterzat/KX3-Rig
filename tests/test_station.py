@@ -401,3 +401,118 @@ def test_audio_scan_that_fails_to_start_retries(monkeypatch):
     s._check_audio()
     s._check_audio()                             # the busy flag was released: a second attempt
     assert len(calls) == 2 and not s._audio_scan_busy
+
+
+DIGIRIG_OUT = "alsa_output.usb-C-Media_Electronics_Inc._USB_PnP_Sound_Device-00.analog-stereo"
+SPEAKERS = "alsa_output.pci-0000_00_1f.3.analog-stereo"
+
+
+class FakeClipPlayer:
+    built: list = []
+
+    def __init__(self, samples, rate, sink, volume, on_done=None, on_error=None):
+        self.sink, self.on_done, self.on_error = sink, on_done, on_error
+        self.stopped = False
+        FakeClipPlayer.built.append(self)
+
+    def start(self):
+        pass
+
+    def stop(self):
+        self.stopped = True
+
+
+class FakeRx:
+    def __init__(self):
+        self.muted = []
+
+    def set_muted(self, on):
+        self.muted.append(on)
+
+    def set_volume(self, v):
+        pass
+
+
+@pytest.fixture
+def clip_player(monkeypatch):
+    import kx3rig.audio
+
+    FakeClipPlayer.built = []
+    monkeypatch.setattr(kx3rig.audio, "ClipPlayer", FakeClipPlayer)
+    return FakeClipPlayer.built
+
+
+def test_clip_never_plays_to_the_digirig(monkeypatch, clip_player):
+    import kx3rig.audio
+    from kx3rig.devices import AudioNode
+
+    s = Station(config.Settings(), demo=False)   # never started
+    monkeypatch.setattr(kx3rig.audio, "default_node_name", lambda kind: DIGIRIG_OUT)
+    s._audio_nodes = [AudioNode(DIGIRIG_OUT, "Audio/Sink"), AudioNode(SPEAKERS, "Audio/Sink")]
+    clip = np.zeros(1_200, np.float32)
+    assert s.play_clip(clip, 12_000) == ""
+    assert [p.sink for p in clip_player] == [SPEAKERS]
+    s.stop_clip()
+    s._audio_nodes = [AudioNode(DIGIRIG_OUT, "Audio/Sink")]
+    assert "No speaker" in s.play_clip(clip, 12_000)
+    assert len(clip_player) == 1 and not s.clip_playing
+
+
+def test_clip_mutes_live_audio_until_it_ends(monkeypatch, clip_player):
+    import kx3rig.audio
+
+    s = Station(config.Settings(listen=True), demo=False)
+    monkeypatch.setattr(kx3rig.audio, "default_node_name", lambda kind: SPEAKERS)
+    s._rx = FakeRx()
+    done = []
+    assert s.play_clip(np.zeros(1_200, np.float32), 12_000, on_done=lambda: done.append(True)) == ""
+    assert s._rx.muted[-1] is True
+    clip_player[0].on_done()
+    assert s._rx.muted[-1] is False and done == [True] and not s.clip_playing
+
+
+def test_failed_clip_stops_its_pipeline(monkeypatch, clip_player):
+    import kx3rig.audio
+
+    s = Station(config.Settings(), demo=False)
+    monkeypatch.setattr(kx3rig.audio, "default_node_name", lambda kind: SPEAKERS)
+    assert s.play_clip(np.zeros(1_200, np.float32), 12_000) == ""
+    clip_player[0].on_error("sink went away")
+    assert pump(lambda: not s.clip_playing)
+    assert clip_player[0].stopped
+
+    class Broken(FakeClipPlayer):
+        def start(self):
+            raise RuntimeError("no sink")
+    monkeypatch.setattr(kx3rig.audio, "ClipPlayer", Broken)
+    assert "Could not play" in s.play_clip(np.zeros(1_200, np.float32), 12_000)
+    assert clip_player[-1].stopped and not s.clip_playing
+
+
+def test_transmitting_stops_a_clip_and_refuses_a_new_one(station, monkeypatch, clip_player):
+    monkeypatch.setattr(station, "_listen_sink", lambda: SPEAKERS)
+    clip = np.zeros(1_200, np.float32)
+    station.select_mode(Mode.USB)
+    station.tune_to(14_285_000)
+    assert pump(lambda: station.radio.mode is Mode.USB and station.radio.frequency == 14_285_000)
+
+    assert station.play_clip(clip, 12_000) == ""
+    assert station.start_talking().allowed
+    assert not station.clip_playing and clip_player[0].stopped
+    assert "Stop transmitting" in station.play_clip(clip, 12_000)
+    assert len(clip_player) == 1
+    station.stop_talking()
+    assert pump(lambda: not station.transmitting)
+
+    assert station.play_clip(clip, 12_000) == ""
+    assert station.play_data(np.zeros(4_800, np.float32), 48_000).allowed
+    assert not station.clip_playing and clip_player[1].stopped
+    assert pump(lambda: not station.transmitting)
+
+    assert station.play_clip(clip, 12_000) == ""
+    station._fake.tune = True                    # keyed at the radio (TUNE)
+    try:
+        assert pump(lambda: not station.clip_playing)
+        assert clip_player[2].stopped
+    finally:
+        station._fake.tune = False

@@ -187,8 +187,9 @@ class MainWindow(Adw.ApplicationWindow):
         """Open the Loop Tune guide; then_scan starts Smartscan when it finishes."""
         if self.looptune is None:
             return
-        if self.station.transmitting:
-            self.toast("Stop transmitting first.")
+        reason = self.looptune.open_refusal(self.engine)
+        if reason:
+            self.toast(reason)
             return
         from .looptune import LoopTuneDialog
 

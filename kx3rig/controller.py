@@ -150,6 +150,8 @@ class Station(GObject.Object):
         was_tx = self.radio.ptt or self.radio.transmitting
         self.radio = state
         is_tx = state.ptt or state.transmitting
+        if is_tx and self._clip is not None:
+            self.stop_clip()   # a replayed clip must never reach the microphone on the air
         if was_tx != is_tx:
             self._apply_listen()
         if state.link is not Link.CONNECTED and self.talking:
@@ -245,6 +247,7 @@ class Station(GObject.Object):
         check = self.voice_check()
         if not check.allowed or self.talking:
             return check
+        self.stop_clip()   # the mic would pick up the speakers and send the clip on the air
         from .audio import VoiceTransmit, default_node_name
 
         try:
@@ -333,6 +336,7 @@ class Station(GObject.Object):
 
         if self.link.tuning_pending:
             return TxCheck(False, "Still tuning. Try again in a moment.", retry=True)
+        self.stop_clip()
         if not self.link.ptt(True, limit_s=limit_s, expect_frequency=self.radio.frequency,
                              expect_mode=self.radio.mode):
             return TxCheck(False, "The radio did not accept push-to-talk.", retry=True)
@@ -495,6 +499,8 @@ class Station(GObject.Object):
         from .audio import ClipPlayer
 
         self.stop_clip()
+        if self.transmitting:
+            return "Stop transmitting to replay a recording."
         sink = None
         if self.demo:
             import sys
@@ -515,14 +521,22 @@ class Station(GObject.Object):
                     on_done()
             return False
 
+        def failed() -> bool:
+            if self._clip is not None and self._clip[0] is token:
+                self._clip[1].stop()
+            return done()
+
+        player = None
         try:
             player = ClipPlayer(samples, rate, sink, self.settings.listen_volume, on_done=done,
-                                on_error=lambda msg: GLib.idle_add(done))
+                                on_error=lambda msg: GLib.idle_add(failed))
             self._clip = (token, player)
             self._apply_listen()
             player.start()
         except Exception as exc:
             self._clip = None
+            if player is not None:
+                player.stop()
             self._apply_listen()
             return f"Could not play the clip: {exc}"
         return ""

@@ -229,8 +229,10 @@ class HeardRow(Gtk.ListBoxRow):
     def refresh(self, entry, now: float) -> None:
         self.row.set_title(frequency_text(entry.tune_hz, entry.kind))
         self.row.set_subtitle(heard_subtitle(entry, now))
-        self.play.set_sensitive(entry.clip is not None)
-        playing = self.panel.playing_id == self.entry_id
+        station = self.panel.scan.station
+        # No replay while keyed: the microphone would send it on the air.
+        self.play.set_sensitive(entry.clip is not None and not station.transmitting)
+        playing = self.panel.playing_id == self.entry_id and station.clip_playing
         self.play.set_icon_name("media-playback-stop-symbolic" if playing else "media-playback-start-symbolic")
         if entry.is_sstv:
             self.add_css_class("dim-label")
@@ -311,6 +313,9 @@ class SmartscanPanel:
         scan.connect("conditions-changed", lambda s: self._refresh_outlook())
         scan.connect("event", lambda s, kind, msg: self.toast(msg))
         GLib.timeout_add_seconds(10, self._tick)
+        self._keyed = False
+        scan.station.connect("radio-changed", lambda s, st: self._on_keyed())
+        scan.station.connect("talking-changed", lambda s, on: self._on_keyed())
         self.refresh()
 
     # --- actions ----------------------------------------------------------------------------
@@ -352,6 +357,12 @@ class SmartscanPanel:
         self._refresh_list()
 
     # --- state ------------------------------------------------------------------------------
+
+    def _on_keyed(self) -> None:
+        keyed = self.scan.station.transmitting
+        if keyed != self._keyed:
+            self._keyed = keyed
+            self._refresh_list()
 
     def _tick(self) -> bool:
         if self.scan.active or self.scan.heard.entries:

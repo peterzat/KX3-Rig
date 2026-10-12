@@ -2,6 +2,8 @@
 
 import time
 
+import numpy as np
+
 import pytest
 from gi.repository import GLib
 
@@ -160,3 +162,81 @@ def test_calling_frequency_is_revisited_and_labelled(station, scan):
     scan.connect("changed", lambda o: visited.append(scan.position))
     assert pump(lambda: 14_285_000 in visited, timeout=15)
     assert pump(lambda: any(e.spot == "QRP calling" for e in scan.heard.entries), timeout=10), [(e.tune_hz, e.spot, e.times) for e in scan.heard.entries]
+
+
+def test_stops_when_radio_audio_goes_away(station, scan):
+    from kx3rig.controller import AudioStatus
+
+    _on(station, 14_300_000, Mode.USB)
+    assert scan.start() == ""
+    assert pump(lambda: scan._phase == "listen", timeout=3)
+    station._set_audio(AudioStatus(rx=False, tx=True, error="Receive audio stopped"))
+    assert pump(lambda: not scan.active, timeout=2)
+    assert any("audio stopped" in m for m in scan.events)
+    assert not station.scanning
+
+
+def test_stops_when_receive_audio_stalls(station, scan):
+    _on(station, 14_300_000, Mode.USB)
+    assert scan.start() == ""
+    assert pump(lambda: scan._phase == "listen", timeout=3)
+    station._demo_source.stop()                  # no more audio, though the status still says rx
+    limit = engine_mod.SETTLE_S + engine_mod.CLIP_S + engine_mod.AUDIO_STALL_S + 1
+    assert pump(lambda: not scan.active, timeout=limit)
+    assert any("audio stopped" in m for m in scan.events)
+
+
+def test_audio_kept_is_bounded_by_time(station, scan):
+    rate = 12_000
+    chunk = np.zeros(16, np.float32)             # a very small buffer
+    for i in range(20_000):
+        scan._feed(chunk, 1_000.0 + (i + 1) * len(chunk) / rate)
+    kept = sum(len(s) for _, s in scan._samples) / rate
+    assert engine_mod.KEEP_AUDIO_S - 0.1 <= kept <= engine_mod.KEEP_AUDIO_S + 0.1
+
+
+def test_start_from_cw_plans_for_the_scan_modes_filter(station, scan):
+    from kx3rig import bandplan
+    from kx3rig.smartscan.plan import make_plan
+
+    _on(station, 14_040_000, Mode.CW)
+    assert pump(lambda: station.radio.bandwidth == 400)
+    assert scan.start() == ""
+    assert pump(lambda: scan._phase == "listen" and station.radio.mode is Mode.USB, timeout=4)
+    usb = make_plan(bandplan.BY_NAME["20m"], Mode.CW, "General", bandwidth_hz=2800)
+    assert scan.plan.kind == "cw" and scan.plan.steps == usb.steps
+    assert scan.position in usb.steps
+
+
+def test_a_cw_signal_in_a_voice_sweep_is_heard_in_cw(station, scan):
+    from kx3rig.smartscan.detect import Detection
+
+    _on(station, 7_200_000, Mode.LSB)
+    assert scan.start() == ""
+    assert scan.plan.kind == "voice" and scan.plan.scan_mode is Mode.LSB
+    assert pump(lambda: scan._phase == "listen", timeout=3)
+    dial = scan.position
+    cw = Detection("cw", 1_000, 1_040, 1_020, 12, 0.5)
+    voice = Detection("voice", 1_300, 2_700, 1_800, 12, 0.5)
+    scan._finish_step(np.zeros(12_000, np.float32), [cw, voice])
+    by_kind = {e.kind: e for e in scan.heard.entries}
+    assert by_kind["cw"].mode is Mode.CW and by_kind["cw"].tune_hz == dial - 1_020
+    assert by_kind["voice"].mode is Mode.LSB
+
+
+def test_an_old_clip_is_recorded_again(station, scan):
+    from kx3rig import bandplan
+    from kx3rig.smartscan.detect import Detection
+    from kx3rig.smartscan.plan import make_plan
+
+    scan.plan = make_plan(bandplan.BY_NAME["20m"], Mode.USB, "General")
+    scan.position = 14_229_000
+    d = Detection("voice", 1_300, 2_900, 1_800, 12, 0.5)
+    hz = scan.plan.tune_frequency(scan.position, d)
+    now = time.time()
+    entry = scan.heard.add(hz, "voice", Mode.USB, 12, -6, now - engine_mod.CLIP_REFRESH_S - 10,
+                           clip=np.ones(10, np.float32))
+    entry.last_seen = now                        # heard on every sweep since
+    assert scan._needs_clip([d])
+    entry.clip_at = now - 10
+    assert not scan._needs_clip([d])

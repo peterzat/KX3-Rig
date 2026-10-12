@@ -248,3 +248,22 @@ def test_summary_sentences():
     assert head == "40 m is quiet near CN87. Best now: 20 m."
     head, ctx = cond.summary(None, B["40m"], "", 6.0, "day")
     assert head.startswith("Checking") and "storm" in ctx
+
+
+def test_mode_follows_the_detection_kind():
+    voice = make_plan(B["40m"], Mode.LSB, "General")
+    assert voice.mode_for("cw") is Mode.CW and voice.mode_for("voice") is Mode.LSB
+    cw = make_plan(B["20m"], Mode.CW, "General")
+    assert cw.mode_for("cw") is Mode.CW and cw.mode_for("voice") is Mode.USB
+
+
+def test_heard_replaces_a_clip_once_it_is_old():
+    from kx3rig.smartscan.heard import CLIP_REFRESH_S
+
+    h = HeardList()
+    h.add(14_230_000, "voice", Mode.USB, 15, -6, now=100, clip=np.ones(5, np.float32))
+    e = h.add(14_230_000, "voice", Mode.USB, 5, -20, now=200, clip=np.zeros(5, np.float32))
+    assert e.clip[0] == 1.0 and e.clip_at == 100          # weaker and still fresh: kept
+    later = 100 + CLIP_REFRESH_S
+    e = h.add(14_230_000, "voice", Mode.USB, 5, -20, now=later, clip=np.zeros(5, np.float32))
+    assert e.clip[0] == 0.0 and e.clip_at == later and e.snr_db == 15

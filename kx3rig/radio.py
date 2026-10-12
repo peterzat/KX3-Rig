@@ -454,7 +454,9 @@ class RadioLink:
         elif kind == "TQ":
             tq = cat.parse_tq(frame)
             if tq is not None:
-                self._update(transmitting=tq)
+                # A transmission's PO and SW readings end with it, so the next
+                # key-down never starts from the last one's.
+                self._update(transmitting=tq, **({} if tq else {"power_out": None, "swr": None}))
         elif kind == "PO":
             self._update(power_out=cat.parse_po(frame))
         elif kind == "SW":
@@ -523,7 +525,8 @@ class RadioLink:
                 self._on_event("no-reply", "The KX3 stopped answering.")
                 return
             self._dispatch(reply)
-            for command in ("PO;",) + (("SW;",) if (self._state.firmware or 0) >= 2.93 else ()):
+            meters = ("PO;",) + (("SW;",) if (self._state.firmware or 0) >= 2.93 else ())
+            for command in meters if self._state.ptt or self._state.transmitting else ():
                 reply = self._get(command)
                 if reply:
                     self._dispatch(reply)
@@ -546,7 +549,7 @@ class RadioLink:
                 if reply:
                     self._dispatch(reply)
             if self._state.power_out is not None or self._state.swr is not None:
-                self._update(power_out=None)
+                self._update(power_out=None, swr=None)
         self._sleep(POLL_INTERVAL)
 
     def _enforce_watchdog(self) -> None:

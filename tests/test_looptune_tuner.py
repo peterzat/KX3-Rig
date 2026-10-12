@@ -130,3 +130,28 @@ def test_tune_check_follows_privileges(station, tuner):
     assert tuner.tx_check().allowed
     station.settings.license_class = "Technician"
     assert not tuner.tx_check().allowed
+
+
+def test_guide_refuses_while_ft8_may_key(station, tuner):
+    import types
+
+    assert tuner.open_refusal(types.SimpleNamespace(busy=False)) == ""
+    assert "FT8" in tuner.open_refusal(types.SimpleNamespace(busy=True))
+    assert tuner.open_refusal() == ""
+
+
+def test_last_tune_swr_never_seeds_the_next(station, tuner):
+    _tune(station, 14_285_000)
+    assert tuner.swr_readable                 # the emulator reports firmware 2.93
+    tuner.demo_knob(0)
+    tuner.demo_hold_tune(True)
+    assert pump(lambda: tuner.best_swr is not None, timeout=3)
+    assert tuner.best_swr < 1.5
+    tuner.demo_hold_tune(False)
+    assert pump(lambda: not tuner.keyed, timeout=3)
+    assert station.radio.swr is None and station.radio.power_out is None
+    tuner.reset_carrier()
+    tuner.demo_knob(30_000)                   # far off resonance this time
+    tuner.demo_hold_tune(True)
+    assert pump(lambda: tuner.keyed and tuner.best_swr is not None, timeout=3)
+    assert tuner.best_swr > 2.5

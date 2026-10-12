@@ -17,6 +17,7 @@ from ..cat import Mode
 MERGE_HZ = {"voice": 1_500, "cw": 150}
 FORGET_S = 15 * 60          # drop a station not heard for this long
 MAX_ENTRIES = 12
+CLIP_REFRESH_S = 300        # record a new clip of a known station after this long
 
 
 @dataclass
@@ -31,6 +32,7 @@ class Heard:
     times: int = 1               # dwells it was heard in
     clip: np.ndarray | None = field(default=None, repr=False)   # 12 kHz mono audio
     clip_dial: int = 0           # dial frequency the clip was recorded at
+    clip_at: float = 0.0         # when the clip was recorded
     id: int = 0
     spot: str = ""               # gathering place it is on ("QRP calling"), if any
 
@@ -72,8 +74,8 @@ class HeardList:
                 match.tune_hz, match.snr_db = tune_hz, snr_db
                 match.spot = spot or match.spot
             match.smeter_db = max(match.smeter_db, smeter_db)
-        if clip is not None and (stronger or match.clip is None):
-            match.clip, match.clip_dial = clip, clip_dial
+        if clip is not None and (stronger or match.clip is None or now - match.clip_at >= CLIP_REFRESH_S):
+            match.clip, match.clip_dial, match.clip_at = clip, clip_dial, now
         self.prune(now)
         return match
 

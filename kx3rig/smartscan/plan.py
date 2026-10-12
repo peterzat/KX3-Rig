@@ -60,6 +60,11 @@ class Plan:
         """The mode to listen to a station in once found."""
         return Mode.CW if self.kind == "cw" else self.scan_mode
 
+    def mode_for(self, kind: str) -> Mode:
+        """The mode to listen to a detection of this kind in: CW for CW (a CW
+        signal heard in a voice sweep), the scan sideband for voice."""
+        return Mode.CW if kind == "cw" else self.scan_mode
+
     def label(self) -> str:
         what = "CW" if self.kind == "cw" else "voice"
         return f"{self.band.label} {what}, {self.low / 1e6:.3f}–{self.high / 1e6:.3f} MHz"
