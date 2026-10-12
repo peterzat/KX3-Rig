@@ -7,28 +7,26 @@ waterfall, lets you listen and talk through your computer, and runs FT8 contacts
 ![KX3-Rig on a ThinkPad, receiving 40 meters through a Digirig on the Elecraft KX3](docs/screenshots/station.jpg)
 
 It is built for one station today: an Elecraft KX3 connected to an Ubuntu laptop through a
-**Digirig Mobile** and the Elecraft KX cable set, with a magnetic loop antenna. The design follows
-[Bottles](https://usebottles.com): GTK 4 and libadwaita, plain language, no clutter.
+**Digirig Mobile** and the Elecraft KX cable set, with a magnetic loop antenna.
 
 ![KX3-Rig on 20 meters](docs/screenshots/radio-dark.png)
 
 ## Why this exists
 
-KX3-Rig shamelessly reuses (excuse me, "forks") WSJT-X and Hamlib 4.5.5. It doesn't do anything
-new. It is just very, very customized to one station and one operator's UI opinions: an
-Elecraft KX3, a Digirig, an AlexLoop, and a General license in Seattle.
+KX3-Rig is based on WSJT-X, Hamlib 4.5.5, and other existing tools. It doesn't do anything new;
+it is just very customized to one station and one operator's UI opinions: an Elecraft KX3, a
+Digirig, and an AlexLoop antenna.
 
-That is the point. Anyone can use or fork it, and with gear like this it should work out of the
-box. Where it shines is as a starting point for **agentic coding**. The repo carries the
-reference material and the rules a coding agent needs to change a radio app safely:
+Anyone can use or fork this repo, and with gear like this it should work out of the box. Where
+it shines is as a starting point for **agentic coding**. The repo carries the reference material
+and the rules a coding agent needs to change a radio app safely:
 
 - sourced radio facts in [docs/references.md](docs/references.md)
 - transmit safety rules and conventions in [CLAUDE.md](CLAUDE.md)
 - an emulator good enough to run the whole app without a radio
 
 Want a quick-bar setting, a different band plan, or support for your antenna? Describe it to
-Claude Code, test it on your equipment, antenna, and local conditions, and it works. The
-development setup (spec, code review, and security review skills, plus conventions) is
+Claude Code, then test it on your own equipment and local conditions. The development setup (spec, code review, and security review skills, plus conventions) is
 [zat.env](https://github.com/peterzat/zat.env).
 
 [Smartscan](docs/smartscan.md) and [Loop Tune](docs/looptune.md) were built this way on
@@ -37,13 +35,15 @@ to talk to. Loop Tune guides the AlexLoop's tuning procedure and quietly says wh
 Each was researched from sources, designed around this station's rules, and verified against
 the emulator, in one Claude Code session apiece.
 
+![Smartscan sweeping 20 meters (demo)](docs/screenshots/scan-dark.png)
+
 The idea behind it is [The Bitter Lesson of Agentic Coding](https://agent-hypervisor.ai/posts/bitter-lesson-of-agentic-coding/):
 "Define what done looks like. Let the model figure out how to get there. Build the simplest
 harness that verifies the work." Here the harness is the references, the rules, and the
-emulator. That makes it easy to repurpose: a different station is a different few paragraphs
-of intent. It also means a professional, polished app can exist for an audience of one, a
-really custom ham shack. Everyone can have one. The whole journey is in
-[docs/custom-shack.md](docs/custom-shack.md).
+emulator, so repurposing the app for a different station takes a few different paragraphs of
+intent. It also means a polished, professional-looking app can exist for an audience of one: a
+really custom ham shack, and anyone can have their own. How Smartscan and Loop Tune were built
+is in [docs/custom-shack.md](docs/custom-shack.md).
 
 What KX3-Rig reuses:
 
@@ -132,7 +132,8 @@ including stations that answer you.
    frequency). The first time, it asks for two KX3 menu settings: TUN PWR 1.0 W and ATU MD BYP.
    Then turn the loop's knob for the loudest band noise, with the meter showing the peak. Hold
    XMIT on the KX3 and nudge the knob for the lowest SWR, then tap XMIT. The tag reads
-   **Loop Tuned** until you move away.
+   **Loop Tuned** until you move away. The best practice, and why, is summarized at the top of
+   [docs/looptune.md](docs/looptune.md).
 
    ![Loop Tune peaking the loop on receive noise (demo)](docs/screenshots/loop-peak-dark.png)
 
@@ -153,8 +154,6 @@ including stations that answer you.
    the band buttons show which bands are open near you; stations appear under the waterfall as
    they are heard. Press play to hear why one was listed, and **Tune** to stop and listen. Stop
    or Esc puts the radio back where it was.
-
-   ![Smartscan sweeping 20 meters (demo)](docs/screenshots/scan-dark.png)
 
 ## Safety
 
@@ -201,6 +200,9 @@ connection, receive, FT8 decoding, and then transmit into a dummy load, in that 
 | Others can't hear you on FT8 | Use Tune and watch the KX3's ALC and power. Raise Audio Level slowly |
 
 ## Development
+
+The design follows [Bottles](https://usebottles.com): GTK 4 and libadwaita, plain language, no
+clutter.
 
 ```bash
 ./run-tests.sh                 # unit tests; no radio needed (WSJT-X tools enable the FT8 round trip)

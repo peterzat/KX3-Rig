@@ -1,8 +1,7 @@
 # A Custom Ham Shack
 
-KX3-Rig is a professional-grade GNOME app with an audience of one: an Elecraft KX3, a Digirig,
-an AlexLoop, a General license, and a ThinkPad in Seattle. Nothing in it is new to ham radio.
-The decoder is WSJT-X's, the CAT knowledge is Elecraft's and Hamlib's, and the tuning advice is
+KX3-Rig is a professional-looking GNOME app with an audience of one: an Elecraft KX3, a Digirig,
+an AlexLoop, a General license, and a ThinkPad. The decoder is WSJT-X's, the CAT knowledge is Elecraft's and Hamlib's, and the tuning advice is
 two decades of operators writing to mailing lists. What is new is that one operator can have
 all of it shaped around exactly their station and their opinions, without writing the code by
 hand.
