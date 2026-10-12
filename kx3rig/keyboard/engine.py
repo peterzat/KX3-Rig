@@ -405,9 +405,12 @@ class KeyboardEngine(GObject.Object):
     # --- tuning -----------------------------------------------------------------------
 
     def tune_radio(self, band: bandplan.Band) -> bool:
-        """Put the radio on the band's PSK31 or CW-calling dial, DATA A."""
+        """Put the radio on the band's PSK31 or CW-calling dial, DATA A. Refused while
+        another activity (an FT8 contact, a WSPR beacon) may key the radio by itself."""
         dial = dial_for(self.mode, band)
         if dial is None or not self.station.connected or self.station.transmitting:
+            return False
+        if self.station.auto_keying(exclude=self):
             return False
         self.station.link.set_frequency(dial)
         self.station.link.set_mode(Mode.DATA, DataSubmode.DATA_A)

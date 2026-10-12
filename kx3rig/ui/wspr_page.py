@@ -290,6 +290,10 @@ class WsprPage(Gtk.Box):
         if self.engine.busy:
             self.toast("Stop the beacon before changing band")
             return
+        other = self.station.auto_keying(exclude=self.engine)
+        if other:
+            self.toast(other)
+            return
         band = self.bands[self.band_dd.get_selected()]
         self.station.go_dial(wspr.DIALS[band.name])
 

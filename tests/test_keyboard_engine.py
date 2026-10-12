@@ -68,6 +68,18 @@ def test_tune_radio_and_send_psk31(station, kb):
     assert kb.lines[-1].ours
 
 
+def test_tune_radio_refused_during_an_ft8_contact(station, kb, monkeypatch, tmp_path):
+    from kx3rig.ft8.engine import Ft8Engine
+
+    monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path))
+    ft8 = Ft8Engine(station, demo=True)
+    ft8.sequencer.call_cq(tx_even=True)
+    assert station.auto_keying(exclude=kb)
+    assert not kb.tune_radio(bandplan.BY_NAME["20m"])
+    pump(lambda: False, timeout=0.3)
+    assert station.radio.frequency == 14_074_000
+
+
 def test_cw_is_checked_as_cw(station, kb):
     kb.set_mode(CW)
     station.tune_to(14_259_300)               # phone segment: no data, but CW is fine

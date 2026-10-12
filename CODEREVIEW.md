@@ -1,85 +1,66 @@
-## Review — 2026-10-12 (commit: 548d7e0)
+## Review — 2026-10-12 (commit: d664373)
 
-**Summary:** Full review of the six unpushed commits on `main` against `origin/main` (c9f2670 through 548d7e0). They add the SWR guard, waiting for faded FT8 stations, FT4, decode filters, waterfall callsigns, the PSK31 and CW modems and the Keyboard view, the WSPR engine and view, the one-keyer rule, and their docs: 58 files, about 5,300 insertions. The refresh conditions were met (prior entry 9ec21fc, block 0, base origin/main), but every file had changed since that commit, so the whole diff got full-depth review. 548d7e0 (README.md and CLAUDE.md only) landed while the review ran and was read. Tests ran under Homebrew python3.14 with the venv's site-packages on PYTHONPATH, because this Mac's .venv has no system site packages and cannot import gi. Baseline: 427 passed, 10 skipped. After /codefix: 433 passed, 10 skipped, with no regressions and six new tests. /codefix fixed the one BLOCK (a flaky test) and five WARNs. Three WARNs remain: two need the operator to rewrite the unpushed history, and one needs tests written by hand. The fixes are uncommitted.
+**Summary:** Full review of the seven unpushed commits on `main` against `origin/main` (c9f2670 through d664373). They add the SWR guard, waiting for faded FT8 stations, FT4, decode filters, waterfall callsigns, the PSK31 and CW modems and the Keyboard view, the WSPR engine and view, the one-keyer rule, their docs, and the prior review's fixes: 56 files, about 5,500 insertions. The refresh conditions failed because the history rewrite left the prior reviewed commit (548d7e0) off this branch, so every file got full-depth review. Tests ran under Homebrew python3.14 with the venv's site-packages on PYTHONPATH, because this Mac's .venv cannot import gi. Baseline: 437 passed, 10 skipped. After /codefix: 438 passed, 10 skipped, with no regressions and one new test. Two of the prior three WARNs are resolved: the regenerated ft4-dark.png reads 0 km for CN87, and the old blob is not in the push set (confirmed by /security); d664373 added the engine-level wait tests. /codefix fixed the one new WARN. The commit-structure WARN remains and needs the operator. The fix and SECURITY.md are uncommitted.
 
 **External reviewers:**
 None configured.
 
 **Built-in review:**
-`/code-review high`: 10 findings, 10 kept after Step 6. 4 matched this review's own findings and 6 were new; all were confirmed against the code. 548d7e0 landed during the built-in run. It touches docs only, and no built-in finding concerns it.
+`/code-review high`: 10 findings, 10 kept after Step 6. 4 matched existing NOTEs or this review's own; 6 were new. All were confirmed against the code, and all are NOTEs.
 
 ### Findings
 
 Remaining:
 
-[WARN] docs/screenshots/ft4-dark.png (added in eb84865) — The screenshot's distance column reveals the station's 6-character subsquare, the precision the 2026-10-12 history rewrite removed. Accepted Risks covers only the 4-character square. The value is withheld here. Confidence: high. (/security)
-  Evidence: SECURITY.md, first finding. The FT4 view computes distances from the full configured grid (kx3rig/ui/ft8_page.py), and demo mode loads the real settings (kx3rig/app.py:115).
-  Suggested fix: Operator action, not a code change. Regenerate the image with a neutral identity (the published FT8 shots use K1ABC and FN42) and put it into eb84865 itself by rewriting the unpushed commits. A later commit that replaces the file would still push the original blob. Before rewriting, record `git rev-parse eb84865:docs/screenshots/ft4-dark.png`; afterwards, confirm that `git rev-list --objects origin/main..main` no longer lists it. The root cause (demo and screenshot runs use the real settings) is a /security NOTE.
-
-[WARN] Commit structure (c9f2670, da063e7, 0b96cc5, 6c87961, eb84865) — The commits mix unrelated concerns:
+[WARN] Commit structure (c9f2670, da063e7, 0b96cc5, 6c87961, fdf3ea7) — Carried from the prior review at its original severity, because it is not in Accepted Risks. The rewrite replaced only the screenshot, and these commits still mix concerns:
   - c9f2670 bundles the FT8 wait with the SWR guard.
   - da063e7 bundles the FT4 encoder with the PSK31 and CW modems.
   - 0b96cc5 ("Add FT4 to the FT8 view, ...") also adds kx3rig/wspr/protocol.py and tests/test_wspr_protocol.py, about 500 lines its message does not mention.
-  - 6c87961 carries a Smartscan doc edit.
-  - eb84865 (docs) carries the Preferences name field.
+  - 6c87961 carries a Smartscan doc edit, and fdf3ea7 (docs) carries the Preferences name field and an FT8 engine message change. Both messages now say so.
   Confidence: high on the facts.
-  Suggested fix: Operator action. Nothing is pushed, so the history can be split before pushing, as was done for ff6ea82. At least move wspr/protocol.py and its test out of 0b96cc5. The screenshot WARN above needs a rewrite of the same commits anyway. /codefix left this alone.
-
-[WARN] kx3rig/ft8/engine.py:257-261, 329-337, 438-445 — The engine side of waiting for a faded station is untested. This is the path that keys the radio again with no new operator action: `_tx_done` starting the wait, `_on_decoded` resuming it, `_tick` ending it, and `_maybe_transmit` keying after a resume. tests/test_ft8_sequencer.py covers only the `Sequencer` methods. Confidence: high.
-  Suggested fix: add engine-level tests to tests/test_station.py, using the `engine` fixture and patching `_wave` as test_ft4_runs_through_the_same_engine does:
-  1. After the repeats run out with no reply, an "event" "waiting" fires, and `_maybe_transmit` does not key during the wait.
-  2. A decode from the contact addressed to us, fed through `_on_decoded`, emits "resumed", and `_maybe_transmit` then keys in the parity opposite to that decode's.
-  3. A `_tick` after `wait_until` halts with "gave-up".
-  4. `halt()` during the wait ends it.
-  /codefix skipped this because it exceeds its 20-line limit; it needs manual work.
+  Suggested fix: operator action. Split the history before pushing (at least move wspr/protocol.py and its test out of 0b96cc5), or record the decision to keep it under Accepted Risks. /codefix cannot do either.
 
 Fixed in this run (see Fixes Applied):
 
-[BLOCK] tests/test_station.py:545-553 — `test_ft4_runs_through_the_same_engine` was flaky: 5 of 8 runs failed in isolation, and /security saw 2 of 6 fail. The pump waited only for the new frequency. The link's tune was often still pending, so `_maybe_transmit` returned at `if self.station.link.tuning_pending` (kx3rig/ft8/engine.py:362). A scratch copy that also waited for `not station.link.tuning_pending` keyed 6 of 6 times. Confidence: high.
-
-[WARN] kx3rig/ui/ft8_page.py:382-385 — Toggling FT8 and FT4 retuned the radio and forced DATA A whenever it was anywhere in an amateur band, against the comment "when the radio was on the old one". From 160 m it jumped to 14.080 MHz. Confidence: high. (also claude-code)
-
-[WARN] kx3rig/wspr/engine.py:285-319 — WSPRnet uploads used the radio's frequency when decoding finished, not the dial the slot was recorded on. That could send a wrong `rqrg` to public data after a retune. Confidence: high on the code. (also claude-code)
-
-[WARN] kx3rig/ui/ft8_page.py:226 — Double-clicking a callsign over the waterfall answered any sender, including a station mid-contact. The decode list allows only a CQ or a call to us. Confidence: high that the paths differed. (also claude-code)
-
-[WARN] kx3rig/keyboard/engine.py:51-55; kx3rig/demo.py:259-271 — The repo's own dial tables show the 17 m and 12 m PSK31 defaults landing inside the FT8 window (18.101 MHz) and the FT4 window (24.921 MHz). The demo also played PSK31 on the 17 m FT8, 12 m FT4, and 30 m FT8 dials. Confidence: high on the arithmetic. (also claude-code)
-
-[WARN] kx3rig/wspr/engine.py:164-236 — The beacon kept transmitting after a band change made elsewhere, without the per-band confirmation. The Radio page's band buttons restore the KX3's per-band memory, which can be another band's WSPR dial in DATA A. This radio's firmware (2.38) gives the SWR guard nothing to read. Confidence: medium.
+[WARN] kx3rig/ui/wspr_page.py:289-298; kx3rig/keyboard/engine.py:407-418 — An FT8 or FT4 contact kept transmitting after the WSPR view or the Keyboard view retuned the radio. Each Tune Radio button checked only its own engine. `Ft8Engine._maybe_transmit` and `check_tx` (kx3rig/ft8/engine.py:147-162, 349-371) never require the FT8 dial. On the emulator, a contact keyed "W1AW N0CALL DM79" at 14.0971 MHz after a retune to the 20 m WSPR dial: the center of the WSPR window. After the Keyboard view's retune it keyed at 14.0715 MHz, in the PSK31 activity. Each transmission still passed the license check. Confidence: high (reproduced).
 
 Notes:
 
-[NOTE] kx3rig/ui/ft8_page.py:471-479, 512-515, 371-386 — A band change, or a switch between FT8 and FT4, clears the decode list but not the waterfall labels. A band change also leaves `engine.decodes` in place. Old-band callsigns stay on screen and can be double-clicked until the next decode, or indefinitely when nothing is decoded (for example after leaving DATA mode). Only answerable ones can now be answered. `_pick_clear_offset` also judges the new band from old decodes. Confidence: high. (claude-code)
+[NOTE] kx3rig/ft8/engine.py:257-261 — The faded-station wait ends as soon as the period after `wait_until` begins, while the decode of the wait's last period can still be running. `_tick` then halts with "didn't come back", and `_on_decoded` finds `seq.waiting` false and drops a reply heard in that period. It happens when jt9 finishes after the period boundary: FT4 decodes from 6.2 s with 1.3 s left, and FT8 from 13.4 s with 1.6 s left. Confidence: high on the code; low impact, since only the wait's last period is affected. Suggested fix: expire the wait only when `_decoding_slot` is not the wait's last slot. (claude-code)
 
-[NOTE] kx3rig/ft8/engine.py:79, 467; kx3rig/ft8/adif.py:91-108; kx3rig/ft8/filters.py:64; kx3rig/ui/ft8_page.py — The worked set holds the full logged call, but lookups use `base_call()`. A logged K1ABC/P never matches, so "New" still shows and "Hide Stations in the Log" does not hide it. Contacts logged from the Keyboard view reach `engine.worked` only after a restart. Confidence: high. (also claude-code)
+[NOTE] kx3rig/ft8/sequencer.py:221-234 — When a faded station is heard calling CQ or signing off, the "call" resume keeps the old stage. A contact that faded in REPORT or ROGER_REPORT therefore sends a signal report, measured minutes earlier, to a station that is calling CQ again, where a fresh Tx1 may serve better. Neither resume path refreshes `report_sent`. How WSJT-X Improved's Wait and Call handles this was not checked. Confidence: medium; this is a design question. (claude-code)
 
-[NOTE] kx3rig/ft8/adif.py:34-36 — `_field` writes a character count, but the file is UTF-8. A non-ASCII "Their Name" (José) writes `<name:4>` over 5 bytes. ADI String fields are meant to be ASCII, and importers differ on characters versus bytes. Confidence: medium; the spec wording was not re-read this session. (also claude-code)
+[NOTE] kx3rig/keyboard/engine.py:200-202, 239-241; kx3rig/keyboard/psk31.py:242-251 — `_drain` copies `_browser.channels` on the main loop without the lock, while the audio thread reassigns and sorts that list in `Browser._scan`. CPython empties a list during `sort` and runs the key function as Python code, so the copy can come back empty. The signal list then drops every row until the next update. Confidence: medium; rare and cosmetic. Copy the list under `self._lock`. (claude-code)
 
-[NOTE] kx3rig/ui/ft8_page.py:191, 223; kx3rig/ft8/engine.py:155, 161 — Several labels are not FT4-aware. When FT4 is the saved mode, the TX marker starts 50 Hz wide (FT4 is 90 Hz) until a toggle. The setup button always reads "Tune Radio to FT8". `check_tx` says "to transmit FT8" and "Tune Radio to FT8 does this." Confidence: high. (claude-code)
+[NOTE] kx3rig/wspr/engine.py:243-248 — The beacon's audio lead is computed from the `now` taken at the start of the tick, after the 5.3-million-sample waveform was synthesized on the main loop (63 ms on this Mac, likely longer on the ThinkPad). Audio starts late by that time, and the window stalls for it. WSPR tolerates the offset. The waveform never changes during a beacon, so it can be built at start and the lead measured just before `play_data`. Confidence: high; low impact. (claude-code)
 
-[NOTE] kx3rig/ft8/ft4.py:187-203; kx3rig/wspr/engine.py:55, 77-80 — Duplication and dead code:
-  - `parse_jt9_ft4_line` copies `decode.parse_jt9_line` except for the marker.
-  - `wspr.engine.band_on_dial` repeats `Protocol.band_on_dial` with another table.
-  - `PTT_LEAD_S` in wspr/engine.py is unused.
-  Confidence: high. (partly claude-code)
+[NOTE] kx3rig/keyboard/engine.py:407-418; kx3rig/controller.py:245-250; kx3rig/smartscan/engine.py:129-132; kx3rig/looptune/tuner.py:93-96 — Duplication:
+  - `KeyboardEngine.tune_radio` repeats `Station.go_dial`.
+  - `Station.go_ft8` has no callers left.
+  - Smartscan and Loop Tune call `auto_keying()` twice, and they keep a separate `ft8.busy` check that the registry already covers.
+  Confidence: high. (claude-code)
 
-[NOTE] kx3rig/ui/keyboard_page.py:346-354; kx3rig/keyboard/varicode.py:15-35 — Received PSK31 text can contain control characters, because Varicode covers 0-31. GTK truncates at NUL: `Gtk.TextBuffer.insert(iter, "ab\x00cd")` inserts "ab", and `Gtk.Label.set_label` does the same (checked this session). Noise that decodes to NUL drops the rest of that 150 ms chunk. Filter received text to printable characters plus newline. Confidence: high on the GTK behavior; low on how often it happens.
+[NOTE] kx3rig/keyboard/engine.py:292-296, 312 — `duration_s` for PSK31 measures `text + " "`, but `send` transmits `" " + text + " "`. The estimate and the MAX_TX_S check are one character (about 0.1 s) short. Confidence: high; negligible impact. (also claude-code)
 
-[NOTE] kx3rig/ui/wspr_page.py:258-259; kx3rig/wspr/engine.py — Changing "Transmit" while the beacon runs replaces the scheduler with a new random seed, so two transmissions can land in consecutive periods despite the no-two-in-a-row rule. The last transmission can also start just before the chosen end time and run about 111 s past it. Confidence: high on the code; low impact.
+[NOTE] kx3rig/ui/radio_page.py; kx3rig/ft8/engine.py:147-162; kx3rig/ui/wspr_page.py:293-296 — The retune fix covers the Keyboard and WSPR views. The Radio page's band buttons and frequency changes, which are already on origin, can still move the radio under an active FT8 contact. `Ft8Engine.check_tx` still does not require the protocol's dial. The WSPR view's new guard has no test because it lives in ui/. /security exercised it by hand on the demo radio. Confidence: high.
 
-[NOTE] kx3rig/keyboard/engine.py:183-189 — `set_offset` is accepted while a message is going out. The audio stays where it was checked, but the waterfall TX marker and the logged frequency follow the new offset. Confidence: high; low impact.
+[NOTE] kx3rig/screenshots.py:188, 194 — The keyboard screenshot plan calls `tune_radio` directly, which now refuses while an FT8 contact is active. If the "qso" plan's contact is still in progress when the keyboard plan starts, psk31-dark.png would show the wrong frequency. The "ft4" plan already had the same dependency through `set_protocol`. Confidence: low; not checked by running the plans. (/security)
 
-[NOTE] kx3rig/controller.py:181-195 — The SWR guard samples `SW` during software CW. What `SW` reads between the elements of a keyed tone, when there is no RF, is unverified at this station. live-test.md section 7 tests the guard only with FT8 Tune. Confidence: low.
+Carried from the prior entry, re-checked and still present:
+- [NOTE] kx3rig/ui/ft8_page.py — A band change, or a switch between FT8 and FT4, clears the decode list but not the waterfall labels. Old-band callsigns stay on screen and can be double-clicked until the next decode.
+- [NOTE] kx3rig/ft8/engine.py:467; kx3rig/ft8/adif.py:91-108; kx3rig/ft8/filters.py:67; kx3rig/ui/ft8_page.py — The worked set holds the full logged call, but lookups use `base_call()`, so a logged K1ABC/P never matches. Contacts logged from the Keyboard view reach `engine.worked` only after a restart. (also claude-code)
+- [NOTE] kx3rig/ft8/adif.py:34-36 — `_field` writes a character count, but the file is UTF-8, so a non-ASCII "Their Name" gets the wrong length.
+- [NOTE] kx3rig/ui/ft8_page.py:191, 223; kx3rig/ft8/engine.py:155, 161 — Several labels are not FT4-aware: the 50 Hz TX marker at startup, "Tune Radio to FT8", and "to transmit FT8". (also claude-code)
+- [NOTE] kx3rig/ft8/ft4.py:187-203; kx3rig/wspr/engine.py:55, 76-79 — `parse_jt9_ft4_line` copies `decode.parse_jt9_line`, `wspr.engine.band_on_dial` repeats `Protocol.band_on_dial`, and `PTT_LEAD_S` in wspr/engine.py is unused.
+- [NOTE] kx3rig/ui/keyboard_page.py:350-354; kx3rig/keyboard/varicode.py — Received PSK31 text can contain control characters, and GTK truncates at NUL.
+- [NOTE] kx3rig/ui/wspr_page.py:258-259 — Changing "Transmit" while the beacon runs reseeds the scheduler, so two transmissions can land back to back.
+- [NOTE] kx3rig/keyboard/engine.py:183-189 — `set_offset` is accepted while a message is going out. The waterfall marker and the logged frequency then follow the new offset.
+- [NOTE] kx3rig/controller.py:181-195 — What `SW` reads between the elements of software CW is unverified.
+- [NOTE] tests/test_wspr_engine.py:115-135; tests/test_keyboard_engine.py:39-44 — The WSPRnet upload test is guarded only by a patch of the global `threading.Thread`. The `kb` fixture builds `KeyboardEngine(station)` with the real log path. An autouse conftest fixture that redirects the XDG directories and blocks socket connects would cover both. (/security, widened this run)
 
-[NOTE] tests/test_wspr_engine.py:115-135 (added by /codefix) — `test_upload_uses_the_dial_the_slot_was_recorded_on` turns off both upload guards (`eng.demo = False`, `wspr_upload = True`). The only thing that stops a real POST to wsprnet.org is a monkeypatch of `threading.Thread`. Also patch `eng._upload`, or make `urllib.request.urlopen` raise. An autouse conftest fixture that blocks `socket.socket.connect` would protect future tests. Confidence: high that it works today. (/security)
+The other /security NOTEs are detailed in SECURITY.md (0 BLOCK, 0 WARN, 14 NOTE).
 
-The other /security NOTEs from this run are detailed in SECURITY.md:
-- The WSPRnet upload follows redirects, reads the reply with no size limit, and does not re-check the setting after its 0-20 s delay.
-- Software CW gets a 50 Hz edge margin, against 100 Hz for real CW.
-- Demo and screenshot runs use the real settings, and a setting changed in demo mode can persist to the real settings file.
-- Nine earlier /security NOTEs were re-checked and are still present; two were carried unchanged.
-
-Carried from the prior entry, not re-checked (the files are outside or unchanged by this diff):
+Carried from earlier entries, not re-checked (the files are unchanged by this diff):
 - [NOTE] docs/looptune.md:18-19, 101-102 — The "2 or 3 W" TUN PWR advice can trip the guide's warning above 3.0 W (kx3rig/looptune/tuner.py:31, 158).
 - [NOTE] docs/looptune.md:17-18 — "Let go" can read as releasing XMIT, which does not end TUNE.
 - [NOTE] docs/custom-shack.md:105 — The doc says the guide "is tested", but `LoopTuneDialog` has no test.
@@ -87,15 +68,10 @@ Carried from the prior entry, not re-checked (the files are outside or unchanged
 
 ### Fixes Applied
 
-All of these are uncommitted in the working tree.
-- [BLOCK] tests/test_station.py:546 — The pump also waits for `not station.link.tuning_pending`. The test then passed 8 of 8 runs (/security) and 5 of 5 here.
-- [WARN] kx3rig/ui/ft8_page.py:375, 386; kx3rig/ft8/protocol.py:84-89 — The toggle records `was_on = engine.on_ft8_frequency()` before `set_protocol`. It retunes only when `follow_dial(was_on, proto)` returns a dial, so 160 m to FT4 stays put. Tested in tests/test_station.py.
-- [WARN] kx3rig/wspr/engine.py:282, 308-325 — `_on_spots` takes `dial: int | None = None`, passed from `_decode_worker` and the demo path. Uploads use it and fall back to the current frequency, so the screenshot plan's 3-argument call still works. Tested with the upload thread faked.
-- [WARN] kx3rig/ft8/sequencer.py:70-73; kx3rig/ui/ft8_page.py:81, 226-227 — A new `answerable(d, my_call)` is used by `DecodeRow` and the label handler. Tested in tests/test_ft8_sequencer.py.
-- [WARN] kx3rig/keyboard/engine.py:48-55; kx3rig/demo.py:262-271; docs/references.md:343-346 — The 17 m and 12 m PSK31 dials are removed until a current, cited dial exists, and references.md says why. `_keyboard_kind` returns "" within 500 Hz of an FT8, FT4, or WSPR dial. Two tests were added to tests/test_keyboard_engine.py.
-- [WARN] kx3rig/wspr/engine.py:101, 172-173, 193, 205, 221 — `start_beacon` records `beacon_band`, and `check_tx` refuses with "The band changed. Start the beacon again on <band>." while the beacon is on. The band is cleared on stop and at the end. Tested: start on 20 m, move to the 40 m WSPR dial, no key-down, and the beacon stops.
+These are uncommitted in the working tree.
+- [WARN] kx3rig/keyboard/engine.py:413-414; kx3rig/ui/keyboard_page.py:288-291; kx3rig/ui/wspr_page.py:293-296 — `KeyboardEngine.tune_radio` returns False while `station.auto_keying(exclude=self)` reports another activity. The Keyboard and WSPR views check the same first, toast the reason (for example "Finish the FT8 contact first."), and leave the radio alone. tests/test_keyboard_engine.py adds `test_tune_radio_refused_during_an_ft8_contact`, which fails against the old code (/security). /security also exercised both views on the demo radio during a CQ, during a faded-station wait, and with the beacon armed.
 
-Re-review of the fixes found no new BLOCK or WARN. The post-fix /security re-check added one NOTE (the test upload guard, above).
+The re-review of the fix found no new BLOCK or WARN. The post-fix /security re-check added no finding.
 
 ### Accepted Risks
 
@@ -106,6 +82,6 @@ Re-review of the fixes found no new BLOCK or WARN. The post-fix /security re-che
   (2026-10-12). Anything more precise, such as a 6-character subsquare, stays out of the repo.
 
 ---
-*Prior review (2026-10-12, commit 9ec21fc): light review of README.md, docs/custom-shack.md, and docs/looptune.md, ending at 0 BLOCK, 0 WARN, and 4 NOTEs, all carried above.*
+*Prior review (2026-10-12, commit 548d7e0): refresh review of the same six feature commits before the history rewrite. It ended at 0 BLOCK, 3 WARN, and 14 NOTEs after /codefix fixed one BLOCK (a flaky FT4 test) and five WARNs, which became d664373. Of the three remaining WARNs, the screenshot subsquare and the untested engine wait are resolved here; the commit structure is carried above.*
 
-<!-- REVIEW_META: {"date":"2026-10-12","commit":"548d7e0","reviewed_up_to":"548d7e0c1bad291998d81cdd8f1f41b3022cdd68","base":"origin/main","tier":"refresh","block":0,"warn":3,"note":14} -->
+<!-- REVIEW_META: {"date":"2026-10-12","commit":"d664373","reviewed_up_to":"d6643738c6d4bfcc24cbe1af8550aabff88161aa","base":"origin/main","tier":"full","block":0,"warn":1,"note":22} -->

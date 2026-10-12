@@ -285,6 +285,10 @@ class KeyboardPage(Gtk.Box):
         if not self._bands:
             return
         band = self._bands[min(self.band_dd.get_selected(), len(self._bands) - 1)]
+        other = self.station.auto_keying(exclude=self.engine)
+        if other:
+            self.toast(other)
+            return
         if not self.engine.tune_radio(band):
             self.toast("Can't change frequency while transmitting")
 
