@@ -56,7 +56,7 @@ class LoopTuner(GObject.Object):
         self.max_power: float | None = None
         self.carrier_seen = False
         # Demo only: the simulated loop's tuning, so the guide can turn a pretend knob.
-        self.demo_loop = demo_loop
+        self._demo_loop = demo_loop
         self._need = self._compute()
         station.connect("radio-changed", lambda s, st: self._on_radio())
 
@@ -163,6 +163,14 @@ class LoopTuner(GObject.Object):
             self.emit("carrier")
 
     # --- demo -----------------------------------------------------------------------------------
+
+    @property
+    def demo_loop(self):
+        """The demo's simulated loop (None with a real radio)."""
+        if self._demo_loop is not None:
+            return self._demo_loop
+        source = getattr(self.station, "_demo_source", None) if self.station.demo else None
+        return getattr(source, "loop", None)
 
     def demo_knob(self, offset_hz: float) -> None:
         """Demo: turn the pretend loop knob to resonate offset_hz from the dial."""

@@ -49,6 +49,8 @@ class Settings:
     serial_port: str = ""
     # Show the radio's audio on this computer's speakers.
     listen: bool = True
+    # The operator has seen Loop Tune's one-time KX3 settings (TUN PWR, ATU MD).
+    loop_setup_seen: bool = False
 
     @property
     def grid4(self) -> str:
@@ -61,7 +63,7 @@ class Settings:
         for name in ("callsign", "grid", "license_class", "serial_port"):
             if not isinstance(getattr(self, name), str):
                 setattr(self, name, defaults[name].default)
-        for name in ("listen",):
+        for name in ("listen", "loop_setup_seen"):
             if not isinstance(getattr(self, name), bool):
                 setattr(self, name, defaults[name].default)
         if self.license_class not in LICENSE_CLASSES:

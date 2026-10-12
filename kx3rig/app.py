@@ -70,6 +70,7 @@ class Application(Adw.Application):
         self.station = None
         self.engine = None
         self.smartscan = None
+        self.looptune = None
 
     def do_startup(self) -> None:
         Adw.Application.do_startup(self)
@@ -115,7 +116,10 @@ class Application(Adw.Application):
         from .smartscan.engine import Smartscan
 
         self.smartscan = Smartscan(self.station, self.engine, demo=bool(self.demo))
-        self.window = MainWindow(self, self.station, self.engine, self.smartscan)
+        from .looptune.tuner import LoopTuner
+
+        self.looptune = LoopTuner(self.station)
+        self.window = MainWindow(self, self.station, self.engine, self.smartscan, self.looptune)
         builder = Gtk.Builder.new_from_string(SHORTCUTS_UI, -1)
         self.window.set_help_overlay(builder.get_object("help_overlay"))
         if self.demo:

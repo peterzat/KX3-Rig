@@ -38,10 +38,16 @@ def _label(text: str, *classes: str, **kw) -> Gtk.Label:
 class RadioPage(Gtk.Box):
     __gtype_name__ = "KX3RadioPage"
 
-    def __init__(self, station, toast, confirm_tx=None, smartscan=None):
+    def __init__(self, station, toast, confirm_tx=None, smartscan=None, looptune=None,
+                 open_loop_tune=None, toast_action=None):
         super().__init__(orientation=Gtk.Orientation.VERTICAL)
         self.station = station
         self.smartscan = smartscan
+        self.looptune = looptune
+        self.open_loop_tune = open_loop_tune or (lambda then_scan=False: None)
+        self.toast_action = toast_action or (lambda message, label, cb: toast(message))
+        self._loop_prompted: str | None = None   # band last prompted to tune the loop for
+        self._loop_toast = None
         self.toast = toast
         self.confirm_tx = confirm_tx       # callable(action): per-band first-TX confirmation
         self._syncing = False
@@ -65,6 +71,13 @@ class RadioPage(Gtk.Box):
         self.state_tag = _label("Receiving", "tag", "heading")
         for t in (self.band_tag, self.mode_tag, self.state_tag):
             tags.append(t)
+        # Where the AlexLoop stands for this dial: subtle when tuned, amber when not.
+        self.loop_tag = Gtk.Button(label="Loop", visible=False)
+        self.loop_tag.add_css_class("tag")
+        self.loop_tag.add_css_class("heading")
+        self.loop_tag.add_css_class("loop-tag")
+        self.loop_tag.connect("clicked", lambda b: self.open_loop_tune())
+        tags.append(self.loop_tag)
         hero.append(tags)
         body.append(hero)
 
@@ -84,12 +97,29 @@ class RadioPage(Gtk.Box):
         controls.attach(self._build_modes(), 1, 1, 1, 1)
         body.append(controls)
 
+        # --- loop tune ------------------------------------------------------------------
+        if looptune is not None:
+            row = Gtk.Box(spacing=12, valign=Gtk.Align.CENTER)
+            self.loop_button = Gtk.Button()
+            self.loop_button.set_child(Adw.ButtonContent(icon_name="kx3rig-loop-symbolic", label="Tune Loop"))
+            self.loop_button.add_css_class("pill")
+            self.loop_button.set_tooltip_text("Guide Through Tuning the AlexLoop for This Frequency")
+            self.loop_button.connect("clicked", lambda b: self.open_loop_tune())
+            row.append(self.loop_button)
+            self.loop_status = _label("", "caption", "dim-label", xalign=0, wrap=True, hexpand=True,
+                                      max_width_chars=60)
+            row.append(self.loop_status)
+            controls.attach(_label("Loop", "caption-heading", "dim-label", "control-label", xalign=1), 0, 3, 1, 1)
+            controls.attach(row, 1, 3, 1, 1)
+            looptune.connect("need-changed", lambda t: self._on_loop_need())
+
         # --- smartscan ------------------------------------------------------------------
         self.scan_panel = None
         if smartscan is not None:
             from .smartscan import SmartscanPanel
 
             self.scan_panel = SmartscanPanel(smartscan, toast)
+            self.scan_panel.guard = self._scan_guard
             controls.attach(_label("Scan", "caption-heading", "dim-label", "control-label", xalign=1), 0, 2, 1, 1)
             controls.attach(self.scan_panel.header, 1, 2, 1, 1)
             body.append(self.scan_panel.outlook)
@@ -120,6 +150,8 @@ class RadioPage(Gtk.Box):
         station.connect("mic-level", lambda s, db: self.mic_bar.set_value(max(0.0, min(1.0, (db + 50) / 50))))
         station.connect("audio-changed", lambda s, a: self.update(self.station.radio))
         self.update(station.radio)
+        if looptune is not None:
+            self._on_loop_need()
 
     # --- builders -----------------------------------------------------------------------------
 
@@ -295,8 +327,56 @@ class RadioPage(Gtk.Box):
             if self.smartscan is not None and self.smartscan.active:
                 # A new band needs the loop peaked before a sweep is worth anything.
                 self.smartscan.stop(restore=False)
-                self.toast(f"Peak the loop on {band.label}, then start Smartscan again.")
+                self._loop_prompted = band.name
+                self._prompt_loop(f"Tune the loop for {band.label}, then Smartscan carries on there.",
+                                  then_scan=True)
             self.station.select_band(band)
+
+    # --- loop tune ---------------------------------------------------------------------------
+
+    def _on_loop_need(self) -> None:
+        from ..looptune.state import NO_LOOP, RETUNE, TOUCH_UP, TUNED
+
+        tuner = self.looptune
+        n = tuner.need
+        connected = self.station.connected
+        self.loop_tag.set_visible(connected and n.band is not None)
+        self.loop_tag.set_label(n.short())
+        self.loop_tag.set_tooltip_text(n.explain())
+        for c in ("attention", "tuned"):
+            self.loop_tag.remove_css_class(c)
+            self.loop_button.remove_css_class(c)
+        if n.wants_action:
+            self.loop_tag.add_css_class("attention")
+            self.loop_button.add_css_class("attention")
+        elif n.level == TUNED:
+            self.loop_tag.add_css_class("tuned")
+        self.loop_status.set_label(n.explain() if connected else "Connect the radio to tune the loop.")
+        self.loop_button.set_sensitive(connected and n.level != NO_LOOP)
+        # A band the loop is not tuned for: offer the guide once per band.
+        band = n.band.name if n.band else None
+        if (connected and n.level == RETUNE and n.offset_hz == 0 and band != self._loop_prompted
+                and not self.station.scanning):
+            self._loop_prompted = band
+            self._prompt_loop(f"Tune the loop for {n.band.label}.", then_scan=False)
+        elif n.level in (TUNED, TOUCH_UP):
+            self._loop_prompted = band
+
+    def _prompt_loop(self, message: str, then_scan: bool) -> None:
+        # One loop prompt at a time: a newer band replaces the older advice.
+        if self._loop_toast is not None:
+            self._loop_toast.dismiss()
+        self._loop_toast = self.toast_action(message, "Tune Loop", lambda: self.open_loop_tune(then_scan=then_scan))
+
+    def _scan_guard(self) -> bool:
+        """Before Smartscan starts: a loop that is not tuned for this band would hear
+        little, so open the guide first (it starts Smartscan when done)."""
+        from ..looptune.state import RETUNE
+
+        if self.looptune is None or self.looptune.need.level != RETUNE:
+            return False
+        self.open_loop_tune(then_scan=True)
+        return True
 
     def _on_mode_toggled(self, button: Gtk.ToggleButton, mode: Mode) -> None:
         if self._syncing or not button.get_active():
@@ -380,6 +460,8 @@ class RadioPage(Gtk.Box):
                 self.waterfall.mirror = mirror
             self.axis.refresh()
             self._update_talk()
+            if self.looptune is not None:
+                self._on_loop_need()
         finally:
             self._syncing = False
 

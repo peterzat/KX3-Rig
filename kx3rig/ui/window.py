@@ -10,6 +10,7 @@ gi.require_version("Adw", "1")
 from gi.repository import Adw, GLib, Gtk  # noqa: E402
 
 from .. import bandplan  # noqa: E402
+from ..looptune.state import RETUNE, TOUCH_UP  # noqa: E402
 from ..radio import Link  # noqa: E402
 from .connect_page import ConnectPage  # noqa: E402
 from .ft8_page import Ft8Page  # noqa: E402
@@ -27,11 +28,12 @@ BANNERS = {
 class MainWindow(Adw.ApplicationWindow):
     __gtype_name__ = "KX3MainWindow"
 
-    def __init__(self, app, station, engine, smartscan=None):
+    def __init__(self, app, station, engine, smartscan=None, looptune=None):
         super().__init__(application=app, title="KX3-Rig")
         self.station = station
         self.engine = engine
         self.smartscan = smartscan
+        self.looptune = looptune
         self.set_default_size(1100, 860)
         self.set_size_request(380, 520)
         self._ever_connected = False
@@ -75,7 +77,8 @@ class MainWindow(Adw.ApplicationWindow):
         view = Adw.ToolbarView()
         header = Adw.HeaderBar()
         self.stack = Adw.ViewStack()
-        self.radio_page = RadioPage(self.station, self.toast, self.confirm_transmit, self.smartscan)
+        self.radio_page = RadioPage(self.station, self.toast, self.confirm_transmit, self.smartscan,
+                                    self.looptune, self.open_loop_tune, self.toast_action)
         self.ft8_page = Ft8Page(self.station, self.engine, self.toast, self.confirm_transmit)
         self.stack.add_titled_with_icon(self.radio_page, "radio", "Radio", "kx3rig-transceiver-symbolic")
         self.stack.add_titled_with_icon(self.ft8_page, "ft8", "FT8", "network-transmit-receive-symbolic")
@@ -173,6 +176,28 @@ class MainWindow(Adw.ApplicationWindow):
         if message:
             self.toasts.add_toast(Adw.Toast(title=message, timeout=4))
 
+    def toast_action(self, message: str, label: str, callback) -> Adw.Toast:
+        """A toast with one button (for example "Tune Loop")."""
+        toast = Adw.Toast(title=message, timeout=8, button_label=label)
+        toast.connect("button-clicked", lambda t: callback())
+        self.toasts.add_toast(toast)
+        return toast
+
+    def open_loop_tune(self, then_scan: bool = False) -> None:
+        """Open the Loop Tune guide; then_scan starts Smartscan when it finishes."""
+        if self.looptune is None:
+            return
+        if self.station.transmitting:
+            self.toast("Stop transmitting first.")
+            return
+        from .looptune import LoopTuneDialog
+
+        visible = self.get_visible_dialog() if hasattr(self, "get_visible_dialog") else None
+        if isinstance(visible, LoopTuneDialog):
+            return
+        dialog = LoopTuneDialog(self.looptune, self.station.settings, self.smartscan, then_scan, self.toast)
+        dialog.present(self)
+
     def _on_event(self, kind: str, message: str) -> None:
         if kind == "connected":
             self.toast("Connected to the KX3")
@@ -246,18 +271,30 @@ class MainWindow(Adw.ApplicationWindow):
         st = self.station.radio
         band = bandplan.band_for(st.frequency)
         name = band.name if band else ""
-        if name and name == self._tx_confirmed_band:
+        # Ask again when the loop needs a retune here, even on a confirmed band.
+        loop = self.looptune.need if self.looptune is not None else None
+        retune = loop is not None and loop.level == RETUNE
+        key = f"{name}|retune@{loop.tuned_hz}" if retune else name
+        if name and key == self._tx_confirmed_band:
             action()
             return
         power = f"{st.power_set:g} W" if st.power_set is not None else "the radio's power setting"
+        if retune:
+            antenna = (f"{loop.explain()} Transmitting into a loop that is off resonance mostly heats it, "
+                       "and the KX3 cuts power on high SWR.")
+        elif loop is not None and loop.level == TOUCH_UP:
+            antenna = loop.explain()
+        else:
+            antenna = ("Make sure your antenna is tuned for this frequency. A magnetic loop such as "
+                       "the AlexLoop needs retuning after every change.")
         dialog = Adw.AlertDialog(
             heading=f"Transmit on {band.label if band else 'this band'}?",
-            body=(f"KX3-Rig will transmit at {power} on {st.frequency / 1e6:.3f} MHz.\n\n"
-                  "Make sure your antenna is tuned for this frequency. A magnetic loop such as "
-                  "the AlexLoop needs retuning for the loudest receive noise after every change. "
+            body=(f"KX3-Rig will transmit at {power} on {st.frequency / 1e6:.3f} MHz.\n\n{antenna} "
                   "You can stop at any time with Stop or the Esc key."),
         )
         dialog.add_response("cancel", "_Cancel")
+        if loop is not None and loop.wants_action:
+            dialog.add_response("tune", "Tune _Loop")
         dialog.add_response("transmit", "_Transmit")
         dialog.set_response_appearance("transmit", Adw.ResponseAppearance.SUGGESTED)
         dialog.set_default_response("transmit")
@@ -265,8 +302,10 @@ class MainWindow(Adw.ApplicationWindow):
 
         def on_response(d, response):
             if response == "transmit":
-                self._tx_confirmed_band = name
+                self._tx_confirmed_band = key
                 action()
+            elif response == "tune":
+                self.open_loop_tune()
         dialog.connect("response", on_response)
         dialog.present(self)
 

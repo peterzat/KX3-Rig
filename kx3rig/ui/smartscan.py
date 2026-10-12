@@ -247,6 +247,9 @@ class SmartscanPanel:
         self.toast = toast
         self.playing_id: int | None = None
         self._syncing = False
+        # Optional hook run before starting: returns True when it took over
+        # (the Radio view opens Loop Tune first when the loop needs it).
+        self.guard = None
 
         # --- header -------------------------------------------------------------------------
         self.header = Gtk.Box(spacing=12, valign=Gtk.Align.CENTER)
@@ -316,6 +319,11 @@ class SmartscanPanel:
         if self._syncing:
             return
         if button.get_active():
+            if self.guard is not None and self.guard():
+                self._syncing = True
+                button.set_active(False)
+                self._syncing = False
+                return
             reason = self.scan.start()
             if reason:
                 self.toast(reason)

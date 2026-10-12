@@ -69,7 +69,8 @@ def run(app, out_dir: str) -> None:
             steps += [(t - 2500, lambda: app.station.link.set_frequency(14_300_000)),
                       (t - 2000, lambda: app.station.link.set_mode(Mode.USB)),
                       (t, lambda: win.show_view("radio")),
-                      # The demo loop is "peaked" where the dial rests for 8 s.
+                      # The demo loop is "peaked" where the dial rests for 8 s; tell Loop Tune so.
+                      (t + 8800, lambda: app.looptune.mark_tuned()),
                       (t + 9000, lambda: win.radio_page.scan_panel.toggle.set_active(True)),
                       (t + 9000 + wait, lambda: capture(win, os.path.join(out_dir, "scan-light.png"))),
                       (t + 9200 + wait, lambda: style.set_color_scheme(Adw.ColorScheme.FORCE_DARK)),
@@ -77,6 +78,55 @@ def run(app, out_dir: str) -> None:
                       (t + 10700 + wait, lambda: style.set_color_scheme(Adw.ColorScheme.DEFAULT)),
                       (t + 10800 + wait, lambda: app.smartscan.stop())]
             t += 12000 + wait
+        if "loop" in plan:
+            from .cat import Mode
+
+            def dialog():
+                d = win.get_visible_dialog()
+                return d if d is not None and hasattr(d, "knob") else None
+
+            def knob(fraction):
+                d = dialog()
+                if d is not None and d.knob is not None:
+                    d.knob.set_value(d.knob.get_upper() * fraction)
+
+            def page(name):
+                d = dialog()
+                if d is not None:
+                    d._show(name)
+
+            def hold(on):
+                d = dialog()
+                if d is not None and getattr(d, "demo_hold", None) is not None:
+                    d.demo_hold.set_active(on)
+
+            shot = lambda name: (lambda: capture(win, os.path.join(out_dir, name)))  # noqa: E731
+            steps += [(t - 2500, lambda: app.station.link.set_frequency(7_185_000)),
+                      (t - 2000, lambda: app.station.link.set_mode(Mode.LSB)),
+                      (t, lambda: win.show_view("radio")),
+                      (t + 2500, shot("loop-retune-light.png")),
+                      (t + 2700, lambda: style.set_color_scheme(Adw.ColorScheme.FORCE_DARK)),
+                      (t + 3000, lambda: win.open_loop_tune()),
+                      (t + 4500, shot("loop-setup-dark.png")),
+                      (t + 4700, lambda: page("peak"))]
+            # Turn the pretend knob through resonance, like an operator would.
+            for i, f in enumerate((0.6, 0.45, 0.3, 0.2, 0.12, 0.06, 0.02, 0.0)):
+                steps.append((t + 5000 + i * 900, lambda f=f: knob(f)))
+            t += 5000 + 8 * 900
+            steps += [(t + 1500, shot("loop-peak-dark.png")),
+                      (t + 1700, lambda: page("swr")),
+                      (t + 2000, lambda: knob(0.08)),
+                      (t + 2200, lambda: hold(True)),
+                      (t + 3500, lambda: knob(0.0)),
+                      (t + 5000, shot("loop-swr-dark.png")),
+                      (t + 5200, lambda: hold(False)),
+                      (t + 6500, lambda: (dialog() or win).grab_focus()),
+                      (t + 7000, lambda: dialog() and dialog().primary.emit("clicked")),
+                      (t + 8000, shot("loop-done-dark.png")),
+                      (t + 8200, lambda: dialog() and dialog().close()),
+                      (t + 8400, lambda: style.set_color_scheme(Adw.ColorScheme.DEFAULT)),
+                      (t + 9500, shot("loop-tuned-light.png"))]
+            t += 10000
         if "radio" in plan:
             steps += [(t, lambda: win.show_view("radio")),
                       (t + 3000, lambda: capture(win, os.path.join(out_dir, "radio-light.png"))),
