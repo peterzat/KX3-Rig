@@ -1,6 +1,6 @@
-## Review — 2026-10-12 (commit: 35a3a25)
+## Review — 2026-10-12 (commit: fcabcf4)
 
-**Summary:** Light review of the one unpushed commit on `main` against `origin/main`: 35a3a25, a docs-only change to README.md (12 insertions, 10 deletions). It wraps seven screenshot `<img>` tags in `<p align="center">` (the pattern the wspr-map image already used) and breaks the example fork prompt into five shorter lines. `codereview-marker surface` is empty, so no tests, /security, external reviewers, built-in review, or fix loop ran. Checked: the prompt's words are unchanged, only its line breaks; all eight screenshot paths exist; the two images inside numbered steps (lines 169, 181) keep the 3-space indent, so they stay inside their list items, and a `<p>` HTML block ends at the following blank line as the `<img>` did; `git diff --check` is clean; no secrets or new location detail. pyproject.toml uses README.md as the package readme, but the change has no runtime effect.
+**Summary:** Light review of the one unpushed commit on `main` against `origin/main`: fcabcf4, a docs-only change to README.md and docs/custom-shack.md (18 insertions, 11 deletions). The README's "Why this exists" now calls the repo an agent-first codebase (linked to the post's `#agent-first-codebase` section) and lists five things that make it one; custom-shack.md adds the screenshot mode and design docs to its pattern list and moves its post link to the same anchor. `codereview-marker surface` is empty, so no tests, /security, external reviewers, built-in review, or fix loop ran. Checked against the repo: docs/references.md marks unsettled items **UNVERIFIED** (7 occurrences); `cat.ALLOWED` is enforced in the one serial write path (kx3rig/radio.py:382-384); `--screenshot` exists, requires `--demo` (kx3rig/app.py:237-242), and CLAUDE.md documents running it in a headless compositor; CLAUDE.md's Layout section points to docs/smartscan.md, docs/looptune.md, and docs/digital-modes.md; `git diff --check` is clean; no secrets or new location detail. Not checked: whether the post has an `#agent-first-codebase` anchor, because fetching the post was denied in this session.
 
 **External reviewers:**
 Skipped (light review).
@@ -10,21 +10,21 @@ Skipped (light review).
 
 ### Findings
 
-No new issues found.
+[NOTE] README.md:34 — "a design doc for each major feature in docs/" overstates the coverage. docs/ has design docs for Smartscan (smartscan.md), Loop Tune (looptune.md), and the digital modes (digital-modes.md: FT8/FT4, PSK31/CW, WSPR), but none for the core Radio page (tuning, waterfall, listening and talking, connection states), which docs/references.md covers only as sourced CAT and audio facts. Confidence: medium that a reader would count the Radio page as a major feature.
+  Evidence: `- a design doc for each major feature in [docs/](docs/), which CLAUDE.md maps`; `ls docs/` lists custom-shack.md, digital-modes.md, live-test.md, looptune.md, references.md, smartscan.md.
+  Suggested fix: Name the covered features ("design docs for Smartscan, Loop Tune, and the digital modes"), or say "for each mode and tool".
 
-The three NOTEs from the prior entry are still present (line numbers updated; README.md was not changed in these places beyond line breaks):
+Carried from the prior entry:
 
-[NOTE] README.md:50, 62 — The repo is called "this agent-aware repo" (line 50) and "an agent-first repo" (line 62, linked) in consecutive paragraphs. The linked post uses "agent-aware" for data, not code, and chose "agent-first" over "agent-aware codebase" as the name. Confidence: medium.
-  Evidence: line 50 `While this agent-aware repo is great for customizing setups similar to mine`; line 62 `[agent-first repo](https://agent-hypervisor.ai/posts/agent-first-repos/#fork-and-customize)`.
-  Suggested fix: Say "agent-first repo" on line 50 as well, or drop the adjective there.
-
-[NOTE] README.md:55 — The prompt still says "FCC Grid FN31". Grid squares are Maidenhead locators (an amateur-radio convention, as docs/smartscan.md:86 treats them), not an FCC designation. Confidence: high on the term.
+[NOTE] README.md:61 — The prompt still says "FCC Grid FN31". Grid squares are Maidenhead locators (an amateur-radio convention, as docs/smartscan.md:86 treats them), not an FCC designation. Confidence: high on the term.
   Evidence: `and matching the rig I run in FCC Grid FN31:`
   Suggested fix: For example, "a US (FCC-licensed) station in grid square FN31", which keeps the band-plan hint that "FCC" may be meant to carry.
 
-[NOTE] README.md:55 and the linked post — The post's Fork and Customize section quotes the prompt with "FCC Grid CN87"; the README says FN31. The post calls it "a prompt along these lines", so this is not an error, and CN87 is published by the operator's decision (Accepted Risks). The post is outside this repo. Confidence: low that it matters.
-  Evidence: post text `matching the rig I run in FCC Grid CN87`; README line 55 `FCC Grid FN31`.
+[NOTE] README.md:61 and the linked post — The post's Fork and Customize section quoted the prompt with "FCC Grid CN87"; the README says FN31. Not re-checked this run (the post could not be fetched). The post is outside this repo. Confidence: low that it matters.
+  Evidence: README line 61 `FCC Grid FN31`.
   Suggested fix: None needed in the repo. Update the post's quoted prompt if the two should match.
+
+Resolved since the prior entry: README.md now says "this agent-first repo" (line 56) where it said "agent-aware", so the wording matches the linked post's name throughout.
 
 Open NOTEs carried from earlier entries (code already on `origin/main`, outside this diff, not re-checked; see the d664373 entry in git history for full detail):
 - [NOTE] kx3rig/ft8/engine.py:257-261 — The faded-station wait can expire while the decode of its last period is still running, so a reply heard in that period is dropped. (claude-code)
@@ -65,6 +65,6 @@ None.
   (2026-10-12). Anything more precise, such as a 6-character subsquare, stays out of the repo.
 
 ---
-*Prior review (2026-10-12, commit 0d1c5cf): light review of the README and custom-shack.md links to the Agent-First Repos post and the neutral FN31 grid in the fork prompt. It ended at 0 BLOCK, 0 WARN, 3 new NOTEs (agent-aware versus agent-first wording, "FCC Grid" as a term, and the post's quoted prompt still showing CN87), with 22 open NOTEs carried from d664373, and resolved the earlier one-shot NOTE.*
+*Prior review (2026-10-12, commit 35a3a25): light review of centered README screenshots and a re-wrapped fork prompt. It ended at 0 BLOCK, 0 WARN, no new findings, with the 3 README NOTEs from 0d1c5cf (agent-aware versus agent-first wording, "FCC Grid" as a term, the post's prompt showing CN87) and 22 open NOTEs from d664373 carried forward.*
 
-<!-- REVIEW_META: {"date":"2026-10-12","commit":"35a3a25","reviewed_up_to":"35a3a25c7ecaabec0e86469e0edeebd6f3bfcd53","base":"origin/main","tier":"light","block":0,"warn":0,"note":25} -->
+<!-- REVIEW_META: {"date":"2026-10-12","commit":"fcabcf4","reviewed_up_to":"fcabcf43d3863770933ab71a076090532cfd38b1","base":"origin/main","tier":"light","block":0,"warn":0,"note":25} -->
