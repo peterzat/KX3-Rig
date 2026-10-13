@@ -20,12 +20,18 @@ anything new; it is just very customized to one station and one operator's UI op
 Elecraft KX3, a Digirig, and an AlexLoop antenna.
 
 Anyone can use or fork this repo, and with gear like this it should work out of the box. Where
-it shines is as a starting point for **agentic coding**. The repo carries the reference material
-and the rules a coding agent needs to change a radio app safely:
+it shines is as an
+**[agent-first codebase](https://agent-hypervisor.ai/posts/agent-first-repos/#agent-first-codebase)**:
+built for a coding agent to develop, operate, and use, with the operator supplying intent and
+judgment. What makes it agent-first is mostly what sits around the code:
 
-- sourced radio facts in [docs/references.md](docs/references.md)
-- transmit safety rules and conventions in [CLAUDE.md](CLAUDE.md)
-- an emulator good enough to run the whole app without a radio
+- an emulator good enough to run the whole app without a radio, so changes can be verified
+- sourced radio facts in [docs/references.md](docs/references.md), with unsettled claims marked
+  UNVERIFIED
+- safety rules in two places: prose in [CLAUDE.md](CLAUDE.md), and code that holds every radio
+  command to an allow-list
+- a headless screenshot mode, so the agent can look at what it built
+- a design doc for each major feature in [docs/](docs/), which CLAUDE.md maps
 
 What KX3-Rig reuses (kept current: each new source a feature borrows from is added here, and
 cited in [docs/references.md](docs/references.md)):
@@ -47,7 +53,7 @@ cited in [docs/references.md](docs/references.md)):
 - **fldigi and G3PLX's PSK31 specification**: the Varicode table, PSK31 shaping, and the CW
   decoder's design, for the Keyboard view.
 
-While this agent-aware repo is great for customizing setups similar to mine, the magic trick
+While this agent-first repo is great for customizing setups similar to mine, the magic trick
 is to do something like this in a Claude Code CLI session with Opus 5.5 and xhigh reasoning:
 
 ```text

@@ -153,13 +153,14 @@ None of this is special to one operator except the choices. The pattern is:
 - an emulator honest enough to develop against
 - radio facts with sources
 - safety rules the agent cannot argue with
+- a screenshot mode and design docs, so the agent can see what it built and orient on a cold start
 - a short description of what you want
 
 With those, the station you actually have gets software that fits it: your antenna's quirks,
 your band plan, your license, your idea of a good interface. Fork the repo, change the intent,
 and keep the harness. That is what makes this an
-[agent-first repo](https://agent-hypervisor.ai/posts/agent-first-repos/): a codebase built for a
-coding agent to develop and operate, with the operator supplying intent and judgment, which
-forks well because the end state, rules, and checks come along. The development setup used here (spec, code review, and security review
-skills, plus conventions) is [zat.env](https://github.com/peterzat/zat.env), driven from the
+[agent-first repo](https://agent-hypervisor.ai/posts/agent-first-repos/#agent-first-codebase): a
+codebase built for a coding agent to develop, operate, and use, with the operator supplying
+intent and judgment. It forks well because the end state, rules, and checks come along. The
+development setup used here (spec, code review, and security review skills, plus conventions) is [zat.env](https://github.com/peterzat/zat.env), driven from the
 Claude Code CLI.
